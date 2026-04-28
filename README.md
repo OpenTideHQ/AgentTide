@@ -1,7 +1,9 @@
 # AgentTide
 
-Placeholder scaffold on **`main`**.
+**AgentTide** hosts the shared **cross-harness** agent corpus for teams building on OpenTide:
 
-The consolidated agent harness (`AGENTS.md`, stub entrypoints such as `CLAUDE.md` / `GEMINI.md`, and `.cursor/skills/`) is contributed through pull requests; see the branch **feat/agent-harness** targeting `main`.
+- `AGENTS.md` — Canonical policies + workflow routing.
+- `CLAUDE.md` / `GEMINI.md` — Thin stubs pointing agents at `AGENTS.md`.
+- `.cursor/skills/*/SKILL.md` — Modular skills (YAML frontmatter) covering OpenTide objects (TVM/DOM/MDR), CoreTide-aligned platforms (**Microsoft Sentinel & Defender**, **Splunk**, **CrowdStrike Falcon**, **Carbon Black Cloud**, **SentinelOne**, **HarfangLab**), vendor-neutral **`kusto-query-language`** guidance shared across Microsoft KQL workloads, plus orchestrating **`detection-engineering`** discipline distilled from hardened internal DetectionOps practice (without organisational-specific assumptions).
 
-See **`LICENSE`** (CC BY-SA 4.0).
+Licence terms live in **`LICENSE`** (Creative Commons Attribution-ShareAlike 4.0 International).

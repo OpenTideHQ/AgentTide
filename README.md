@@ -1,14 +1,7 @@
 # AgentTide
 
-**AgentTide** is the **OpenTideHQ** harness repository: shared agent instructions (`AGENTS.md`), **AgentSkills**-style skills under `.cursor/skills/`, and thin stubs so multiple coding assistants resolve a single source of truth.
+Placeholder scaffold on **`main`**.
 
-Use this repo alongside any **OpenTide content** repository (YAML TVM / DOM / MDR corpus) or when building detection-engineering workflows on top of the OpenTide model.
+The consolidated agent harness (`AGENTS.md`, stub entrypoints such as `CLAUDE.md` / `GEMINI.md`, and `.cursor/skills/`) is contributed through pull requests; see the branch **feat/agent-harness** targeting `main`.
 
-## Contents
-
-- `AGENTS.md` — Canonical cross-harness agent entrypoint.
-- `.cursor/skills/*/SKILL.md` — Modular skills spanning threat intelligence analysis, detection engineering lifecycle, OpenTide object authoring, KQL, and Sigma.
-
-## Licence
-
-See [LICENSE](LICENSE).
+See **`LICENSE`** (CC BY-SA 4.0).

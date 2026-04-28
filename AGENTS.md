@@ -80,22 +80,32 @@ Unless explicitly commissioned:
 
 ## Skills index (`AgentTide/.cursor/skills`)
 
+### OpenTide content authoring
 | Skill | Purpose |
-|-------|---------|
-| `opentide-threat-vector` | Intel structuring + TVMs |
-| `opentide-detection-objective` | DOM authoring |
-| `opentide-detection-rule` | MDR authoring & platform bridging |
-| `detection-engineering` | Cross-object sequencing & analytic operationalisation hygiene |
-| `kusto-query-language` | Vendor-neutral advanced KQL for Microsoft Sentinel + Defender Advanced Hunting workloads |
-| `microsoft-sentinel` | Sentinel / Log Analytics operational specifics atop KQL |
-| `microsoft-defender-endpoint` | Defender for Endpoint specifics atop KQL |
-| `splunk-spl-processing` | SPL for Splunk-centred artefacts |
-| `crowdstrike-falcon` | CrowdStrike configuration guidance |
-| `carbon-black-cloud` | Carbon Black Cloud Enterprise EDR guidance |
-| `sentinelone-singularity` | SentinelOne Singularity guidance (non-Microsoft-sentinel!) |
-| `harfanglab` | HarfangLab orb guidance |
+|---|---|
+| `opentide-threat-vector` | TVM authoring — Phase A intelligence structuring + Phase B schema-backed YAML |
+| `opentide-detection-objective` | DOM authoring — signals, methodology, data contracts |
+| `opentide-detection-rule` | MDR authoring + platform `configurations.*` bridging |
 
-Load the **narrowest** skill first — escalate outward when coordination demands.
+### Detection-engineering practice
+| Skill | Purpose |
+|---|---|
+| `detection-engineering` | Cross-object sequencing, hunt-to-rule conversion (7-step), platform pairing matrix, maturity progression, MR scope discipline |
+| `threat-hunting` | Hypothesis discipline (ABLE), confidence/relevance/priority scoring, archetypes, data-gap analysis, hunt → OpenTide content conversion |
+
+### Languages & platforms
+| Skill | Purpose |
+|---|---|
+| `kusto-query-language` | Vendor-neutral KQL — operator hierarchy, joins, FP engineering, anti-patterns (+ `references/Best-Practices.md`, `references/Hypothesis-Anti-Patterns.md`) |
+| `microsoft-sentinel` | Sentinel / Log Analytics specifics — table domain matrix, ResultType codes, NRT vs scheduled rules, ASIM, TI patterns (+ `references/Anti-Patterns.md`) |
+| `microsoft-defender-endpoint` | Defender Advanced Hunting specifics — Device*/Email* schemas, mandatory output columns, FileProfile, AdditionalFields, NRT constraints (+ `references/Anti-Patterns.md`) |
+| `splunk-spl-processing` | SPL for Splunk Enterprise / ES — index/sourcetype discipline, stats vs tstats vs mstats, accelerated DMs, ES correlation searches, RBA |
+| `crowdstrike-falcon` | Falcon surface map (Insight FQL, NG-SIEM CQL, Custom IOA/IOC, Fusion, RTR), Storyline ID correlation, sensor coverage |
+| `carbon-black-cloud` | Carbon Black Cloud Enterprise EDR — Watchlist Reports, scheduled searches, process_guid correlation, Live Response |
+| `sentinelone-singularity` | SentinelOne Singularity (NOT Microsoft Sentinel) — STAR Custom Logic, DVQL, PowerQuery / SDL, Storyline ID, exclusion discipline |
+| `harfanglab` | HarfangLab orb — Sigma rule packs, RHQL hunting, YARA, custom detection rules |
+
+Load the **narrowest** skill first — escalate outward when coordination demands. For any KQL surface always pair `kusto-query-language` with the relevant Microsoft platform skill.
 
 ---
 

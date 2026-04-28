@@ -27,7 +27,7 @@ When unclear which corpus you are editing — ask **before creating paths**.
 
 ## Threat intelligence vs TVM authoring (explicit scoping rule)
 
-Historical confusion would split unstructured intel triage and TVM authoring into sibling skills—a pattern that risks ambiguous triggers (“Are we brainstorming or emitting YAML?”). Consolidated practice here: **everything that lands in a Threat Vector file flows through **`opentide-threat-vector`**, separating **Phase A intelligence structuring** from **Phase B schema-backed YAML authoring** inside one skill lifecycle. Maintain one deliverable lineage from signal intake to **`tvm::…`** artefacts.
+Historical confusion would split unstructured intel triage and TVM authoring into sibling skills—a pattern that risks ambiguous triggers (“Are we brainstorming or emitting YAML?”). Consolidated practice here: everything that lands in a Threat Vector file flows through the **`opentide-threat-vector`** skill, separating **Phase A intelligence structuring** from **Phase B schema-backed YAML authoring** inside one skill lifecycle. Maintain one deliverable lineage from signal intake to **`tvm::…`** artefacts.
 
 *(Progressive layering matches guidance that skills tie to deterministic deliverables whenever possible.)*
 

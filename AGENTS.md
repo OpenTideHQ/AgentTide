@@ -85,6 +85,7 @@ Unless explicitly commissioned:
 |---|---|
 | `detection-engineering` | Cross-object sequencing, hunt-to-rule conversion (7-step), platform pairing matrix, maturity progression, PR scope discipline |
 | `threat-hunting` | Hypothesis discipline (ABLE), confidence/relevance/priority scoring, archetypes, data-gap analysis, hunt → OpenTide content conversion |
+| `mitre-attack-mapping` | ATT&CK technique/sub-technique selection, tactic assignment, version pinning, revocation handling, coverage analysis |
 
 ### Languages & platforms
 | Skill | Purpose |
@@ -92,6 +93,8 @@ Unless explicitly commissioned:
 | `kusto-query-language` | Vendor-neutral KQL — operator hierarchy, joins, FP engineering, anti-patterns (+ `references/Best-Practices.md`, `references/Hypothesis-Anti-Patterns.md`) |
 | `microsoft-sentinel` | Sentinel / Log Analytics specifics — table domain matrix, ResultType codes, NRT vs scheduled rules, ASIM, TI patterns (+ `references/Anti-Patterns.md`) |
 | `microsoft-defender-endpoint` | Defender Advanced Hunting specifics — Device*/Email* schemas, mandatory output columns, FileProfile, AdditionalFields, NRT constraints (+ `references/Anti-Patterns.md`) |
+| `entra-id-protection` | Entra ID identity-attack detection — sign-in/user risk, SKU gating, ResultType codes, AiTM/MFA fatigue/OAuth abuse patterns |
+| `windows-event-logs` | Windows native event IDs (Security/Sysmon/PowerShell), audit policy prerequisites, platform table mapping |
 | `splunk-spl-processing` | SPL for Splunk Enterprise / ES — index/sourcetype discipline, stats vs tstats vs mstats, accelerated DMs, ES correlation searches, RBA |
 | `crowdstrike-falcon` | Falcon surface map (Insight FQL, NG-SIEM CQL, Custom IOA/IOC, Fusion, RTR), Storyline ID correlation, sensor coverage |
 | `carbon-black-cloud` | Carbon Black Cloud Enterprise EDR — Watchlist Reports, scheduled searches, process_guid correlation, Live Response |

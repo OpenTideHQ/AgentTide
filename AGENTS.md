@@ -100,6 +100,21 @@ Unless explicitly commissioned:
 | `carbon-black-cloud` | Carbon Black Cloud Enterprise EDR — Watchlist Reports, scheduled searches, process_guid correlation, Live Response |
 | `sentinelone-singularity` | SentinelOne Singularity (NOT Microsoft Sentinel) — STAR Custom Logic, DVQL, PowerQuery / SDL, Storyline ID, exclusion discipline (+ `references/DVQL-Field-Reference.md`) |
 | `harfanglab` | HarfangLab orb — Sigma rule packs, RHQL hunting, YARA, custom detection rules |
+| `okta-identity` | Okta System Log event schema, authentication flows, cross-tenant impersonation, session theft, admin API abuse |
+| `amazon-web-services` | CloudTrail events, IAM mechanics, GuardDuty findings, S3/EC2 exfiltration, cross-account access |
+| `microsoft-azure` | Activity Log, ARM operations, RBAC/PIM, managed identities, Key Vault, VM extensions |
+| `google-cloud-platform` | Cloud Audit Logs, IAM/service accounts, workload identity, Chronicle/YARA-L mapping |
+
+### Defensive internals
+| Skill | Purpose |
+|---|---|
+| `windows-internals` | Process creation chain, access tokens/privileges, DLL loading, SCM, COM/WMI, named pipes, ETW, AMSI, registry |
+| `active-directory` | Kerberos/NTLM flows, DCSync/DCShadow, delegation abuse, AD CS (ESC1-ESC13), GPO, LDAP reconnaissance |
+| `identity-providers` | OAuth2/OIDC flows, SAML/Golden SAML, PRT mechanics, refresh token binding, federation chains, MFA ceremonies |
+| `network-protocols` | DNS tunnelling/DGA, TLS anomalies, SMB coercion, HTTP/S C2 beaconing, LDAP, RDP, WinRM, SMTP headers |
+| `email-and-collaboration` | Exchange Online mail flow, mailbox forwarding, OAuth app permissions, MailItemsAccessed, SharePoint, Teams, Purview UAL |
+| `linux-internals` | Process model, capabilities, auditd, eBPF/Falco/Tetragon, systemd, PAM, SSH, container isolation |
+| `macos-internals` | launchd/XPC, TCC framework, Gatekeeper/notarisation, code signing, persistence locations, Keychain, Endpoint Security |
 
 Load the **narrowest** skill first — escalate outward when coordination demands. For any KQL surface always pair `kusto-query-language` with the relevant Microsoft platform skill.
 

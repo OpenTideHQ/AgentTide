@@ -210,14 +210,15 @@ Detection searches then run against the summary index instead of raw events.
 
 // Beaconing detection (interval consistency)
 index=proxy sourcetype=proxy_logs earliest=-7d@d
-| stats min(_time) AS first_seen max(_time) AS last_seen count AS conn_count
-    list(_time) AS times
-    by src dest dest_port
+| sort 0 src, dest, dest_port, _time
+| streamstats current=false last(_time) AS prev_time by src, dest, dest_port
+| where isnotnull(prev_time)
+| eval interval = _time - prev_time
+| stats count AS conn_count avg(interval) AS mean_interval stdev(interval) AS stdev_interval
+    by src, dest, dest_port
 | where conn_count > 20
-| eval intervals = mvrange(first_seen, last_seen, (last_seen - first_seen) / conn_count)
-| eval mean_interval = (last_seen - first_seen) / (conn_count - 1)
-| eval stdev_interval = stdev(mvmap(times, _time - first_seen))
-| where (stdev_interval / mean_interval) < 0.2
+| eval cv = stdev_interval / mean_interval
+| where cv < 0.2
 
 // Impossible travel (per-user pairwise)
 | sort 0 user, _time

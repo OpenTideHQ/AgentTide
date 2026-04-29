@@ -145,8 +145,8 @@ process.target.image.path matches ".*\\\\lsass\\.exe$"
 **Suspicious service creation:**
 ```
 event.type == "service_creation"
-    and service.image_path contains "cmd.exe"
-    or service.image_path contains "powershell.exe"
+    and (service.image_path contains "cmd.exe"
+        or service.image_path contains "powershell.exe")
 | group by host.name, service.name
 ```
 

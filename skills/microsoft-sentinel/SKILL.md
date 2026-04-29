@@ -19,7 +19,7 @@ Author and review KQL for Microsoft Sentinel (Azure Log Analytics) workspaces. T
 | Network appliances (firewall, proxy) | **Sentinel** | `CommonSecurityLog`, `Syslog` |
 | Windows Security Events (non-Defender) | **Sentinel** | `SecurityEvent`, `WindowsEvent` |
 | DNS queries | **Sentinel** | `DnsEvents`, `DnsInventory` |
-| Threat intelligence matching | **Sentinel** | `ThreatIntelIndicators` (replaces `ThreatIntelligenceIndicator` in newer tenants) |
+| Threat intelligence matching | **Sentinel** | `ThreatIntelligenceIndicator` (newer tenants may use `ThreatIntelIndicators`) |
 | UEBA anomalies | **Sentinel** | `BehaviorAnalytics` |
 | Identity enrichment | **Sentinel** | `IdentityInfo` |
 | Watchlists | **Sentinel** | `_GetWatchlist('name')` |
@@ -86,7 +86,7 @@ Wrong column = guaranteed `SYNTAX_ERROR`. Common contamination traps:
 | Firewall/proxy/IDS/IPS | `CommonSecurityLog` |
 | Linux syslog | `Syslog` |
 | DNS resolution | `DnsEvents` |
-| TI indicator matches | `ThreatIntelIndicators` |
+| TI indicator matches | `ThreatIntelligenceIndicator` |
 | Cloud app activity | `CloudAppEvents` |
 
 **Step 3 — query body** with the mandatory header from `kusto-query-language`:
@@ -255,7 +255,7 @@ union isfuzzy=true SigninLogs, AADNonInteractiveUserSignInLogs
 let lookback = ago(14d);
 // Stage 1: dedup TI indicators (latest per indicator)
 let active_ti = materialize(
-    ThreatIntelIndicators
+    ThreatIntelligenceIndicator
     | where TimeGenerated > lookback
     | where ExpirationDateTime > now()
     | where Active == true

@@ -1,6 +1,6 @@
 # AGENTS.md — Unified agent entrypoint (OpenTide / AgentTide)
 
-Canonical instructions for autonomous coding assistants working across **AgentTide** (this harness repository) and **OpenTide content** repositories. Pair with granular skills under **`.cursor/skills/<skill-name>/SKILL.md`** (`description` YAML frontmatter enables discovery similarly to broader [Agent Skill patterns](https://agentskills.io/skill-creation/best-practices)).
+Canonical instructions for autonomous coding assistants working across **AgentTide** (this harness repository) and **OpenTide content** repositories. Pair with granular skills under **`skills/<skill-name>/SKILL.md`** following the [Agent Skills specification](https://agentskills.io/specification) — each `SKILL.md` carries YAML frontmatter (`name`, `description`) for discovery, with optional `references/`, `assets/`, and `scripts/` subdirectories.
 
 ---
 
@@ -78,7 +78,7 @@ Unless explicitly commissioned:
 
 ---
 
-## Skills index (`AgentTide/.cursor/skills`)
+## Skills index (`AgentTide/skills`)
 
 ### OpenTide content authoring
 | Skill | Purpose |
@@ -106,12 +106,6 @@ Unless explicitly commissioned:
 | `harfanglab` | HarfangLab orb — Sigma rule packs, RHQL hunting, YARA, custom detection rules |
 
 Load the **narrowest** skill first — escalate outward when coordination demands. For any KQL surface always pair `kusto-query-language` with the relevant Microsoft platform skill.
-
----
-
-## Cross-harness stubs
-
-Primary knowledge lives here (**`AGENTS.md`**). Thin pointer files (**`CLAUDE.md`**, **`GEMINI.md`**) steer tools that insist on proprietary filenames toward this document.
 
 ---
 

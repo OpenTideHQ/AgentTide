@@ -22,30 +22,11 @@ _The Open Source AI Agent Harness for OpenTide_
 
 ### Skill matrix
 
-#### OpenTide content authoring
-| Skill | Purpose |
-|---|---|
-| `opentide-threat-vector` | TVM authoring — intelligence structuring + schema-backed YAML |
-| `opentide-detection-objective` | DOM authoring — signals, methodology, data contracts |
-| `opentide-detection-rule` | MDR authoring + platform `configurations.*` bridging |
+See the [full skills index in AGENTS.md](AGENTS.md#skills-index-agenttideskills) for the authoritative list. Skills span three categories:
 
-#### Detection engineering practice
-| Skill | Purpose |
-|---|---|
-| `detection-engineering` | Cross-object sequencing, hunt-to-rule conversion, platform pairing, MR scope discipline |
-| `threat-hunting` | ABLE framework, hypothesis scoring, archetypes, hunt → OpenTide content bridge |
-
-#### Languages & platforms (CoreTide deployers)
-| Skill | Platform |
-|---|---|
-| `kusto-query-language` | KQL — vendor-neutral language layer (+ Best-Practices, Hypothesis-Anti-Patterns references) |
-| `microsoft-sentinel` | Microsoft Sentinel / Log Analytics (+ Anti-Patterns reference) |
-| `microsoft-defender-endpoint` | Microsoft Defender for Endpoint Advanced Hunting (+ Anti-Patterns reference) |
-| `splunk-spl-processing` | Splunk Enterprise / Enterprise Security |
-| `crowdstrike-falcon` | CrowdStrike Falcon Insight + NG-SIEM + Custom IOA/IOC + Fusion + RTR |
-| `carbon-black-cloud` | VMware Carbon Black Cloud Enterprise EDR |
-| `sentinelone-singularity` | SentinelOne Singularity (NOT Microsoft Sentinel) |
-| `harfanglab` | HarfangLab orb (Sigma + RHQL + YARA) |
+- **OpenTide content authoring** — TVM, DOM, MDR object lifecycle
+- **Detection engineering practice** — hunt-to-rule conversion, hypothesis discipline, ATT&CK mapping
+- **Languages & platforms** — KQL, SPL, FQL/CQL, DVQL, Sigma/RHQL, plus platform-specific tribal knowledge for Microsoft Sentinel, Defender for Endpoint, Splunk, CrowdStrike Falcon, Carbon Black Cloud, SentinelOne Singularity, HarfangLab, Entra ID, and Windows event logs
 
 ### Quick start
 

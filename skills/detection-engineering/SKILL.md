@@ -1,6 +1,6 @@
 ---
 name: detection-engineering
-description: Detection engineering lifecycle across the OpenTide TVM → DOM → MDR sequence and the operational practice of converting validated hunting queries into production detection rules. Encodes hunting-vs-detection trade-offs, hunt-to-rule conversion (7-step process with FP reduction, entity mapping, NRT compliance, response actions), platform pairing matrix (Microsoft KQL split, Splunk SPL, vendor consoles), maturity progression, merge-scope discipline, and quality bars. Use when planning multi-phase detection work, sequencing object types in OpenTide content repos, reviewing MR scope, or operationalising hunts into MDR objects.
+description: Detection engineering lifecycle across the OpenTide TVM → DOM → MDR sequence and the operational practice of converting validated hunting queries into production detection rules. Encodes hunting-vs-detection trade-offs, hunt-to-rule conversion (7-step process with FP reduction, entity mapping, NRT compliance, response actions), platform pairing matrix (Microsoft KQL split, Splunk SPL, vendor consoles), maturity progression, PR scope discipline, and quality bars. Use when planning multi-phase detection work, sequencing object types in OpenTide content repos, reviewing PR scope, or operationalising hunts into MDR objects.
 ---
 
 # Detection engineering — OpenTide + DetectionOps
@@ -265,10 +265,10 @@ For Splunk / CrowdStrike / Carbon Black / SentinelOne / HarfangLab equivalents, 
 
 ---
 
-## 7. Merge-scope discipline (OpenTide change requests)
+## 7. PR scope discipline (OpenTide change requests)
 
-- Default merges contain **one object type at a time** (TVM, DOM, or MDR).
-- An end-to-end vertical slice is acceptable when explicitly orchestrated (drill, pilot, framework bootstrap) — call it out in the merge request narrative.
+- Default pull requests contain **one object type at a time** (TVM, DOM, or MDR).
+- An end-to-end vertical slice is acceptable when explicitly orchestrated (drill, pilot, framework bootstrap) — call it out in the pull request narrative.
 - Detection rule changes that span multiple platform `configurations.*` blocks may live in one MDR file but should be reviewed per-platform.
 - Schema/template changes never travel inside a content merge — they go through dedicated framework merges.
 

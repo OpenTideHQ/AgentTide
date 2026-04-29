@@ -5,9 +5,9 @@ description: Structures threat intelligence into evidence-backed behavioural ato
 
 # OpenTide Threat Vector (TVM)
 
-## Why one skill handles both “intel” and “YAML”
+## Why one skill handles both "intel" and "YAML"
 
-Agent skill design works best when each skill matches a **deliverable** with a clear trigger, and sub-steps stay in one progressive flow ([Agent Skills authoring guidance](https://agentskills.io/skill-creation/best-practices)): split “TI analysis only” vs “TVM authoring” and the agent must guess which triggers apply to the same sprint. Threat Vector work is fundamentally **intel → structured hypothesis → validated TVM YAML** — keep upstream triage inside this skill under **Phase A**, then transition to **Phase B**.
+Agent skill design works best when each skill matches a **deliverable** with a clear trigger, and sub-steps stay in one progressive flow ([Agent Skills authoring guidance](https://agentskills.io/skill-creation/best-practices)): split "TI analysis only" vs "TVM authoring" and the agent must guess which triggers apply to the same sprint. Threat Vector work is fundamentally **intel → structured hypothesis → validated TVM YAML** — keep upstream triage inside this skill under **Phase A**, then transition to **Phase B**.
 
 ---
 
@@ -46,7 +46,7 @@ Guardrails remain: no fabrication of sightings, IOCs, or attribution beyond the 
 
 ### Preconditions
 
-1. Load live **`Schemas/Templates`** for TVM and **`Schemas/*.json`** for the tenant’s tvm schema revision (for example `tvm::2.1`).
+1. Load live **`Schemas/Templates`** for TVM and **`Schemas/*.json`** for the tenant's tvm schema revision (for example `tvm::2.1`).
 2. Confirm **`Objects/Threat Vectors/`** conventions in the corpus you edit.
 
 ### Authoring norms

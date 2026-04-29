@@ -8,7 +8,7 @@ Canonical instructions for autonomous coding assistants working across **AgentTi
 
 | Context | Responsibility |
 |---------|----------------|
-| **AgentTide (`OpenTideHQ/AgentTide`)** | Maintain **AGENTS.md**, pointer stubs (**`CLAUDE.md`**, **`GEMINI.md`**), reusable skills. Treat substantive harness alterations like product code — **merge via reviewed pull requests** unless admins explicitly bootstrap or hotfix **`main`**.|
+| **AgentTide (`OpenTideHQ/AgentTide`)** | Maintain **AGENTS.md** and reusable skills. Treat substantive harness alterations like product code — **merge via reviewed pull requests** unless admins explicitly bootstrap or hotfix **`main`**.|
 | **Content repositories (`ShareTide`, tenants, clones)** | Produce **validated YAML objects**, respect CI, never mutate undelegated scaffolding (schemas/engine paths).|
 
 When unclear which corpus you are editing — ask **before creating paths**.
@@ -25,13 +25,6 @@ When unclear which corpus you are editing — ask **before creating paths**.
 
 ---
 
-## Threat intelligence vs TVM authoring (explicit scoping rule)
-
-Historical confusion would split unstructured intel triage and TVM authoring into sibling skills—a pattern that risks ambiguous triggers (“Are we brainstorming or emitting YAML?”). Consolidated practice here: everything that lands in a Threat Vector file flows through the **`opentide-threat-vector`** skill, separating **Phase A intelligence structuring** from **Phase B schema-backed YAML authoring** inside one skill lifecycle. Maintain one deliverable lineage from signal intake to **`tvm::…`** artefacts.
-
-*(Progressive layering matches guidance that skills tie to deterministic deliverables whenever possible.)*
-
----
 
 ## Framework essentials (compact)
 
@@ -90,7 +83,7 @@ Unless explicitly commissioned:
 ### Detection-engineering practice
 | Skill | Purpose |
 |---|---|
-| `detection-engineering` | Cross-object sequencing, hunt-to-rule conversion (7-step), platform pairing matrix, maturity progression, MR scope discipline |
+| `detection-engineering` | Cross-object sequencing, hunt-to-rule conversion (7-step), platform pairing matrix, maturity progression, PR scope discipline |
 | `threat-hunting` | Hypothesis discipline (ABLE), confidence/relevance/priority scoring, archetypes, data-gap analysis, hunt → OpenTide content conversion |
 
 ### Languages & platforms

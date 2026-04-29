@@ -23,7 +23,7 @@ configurations:
   # sentinel_one:
 ```
 
-Exact nesting keys follow generated templates—mirror your repository’s sanctioned structure.
+Exact nesting keys follow generated templates—mirror your repository's sanctioned structure.
 
 ---
 
@@ -48,4 +48,4 @@ Invoke **query language skill** aligned with targeted stack:
 | Carbon Black Cloud | `carbon-black-cloud` |
 | HarfangLab | `harfanglab` |
 
-Avoid shipping vendor-specific artefacts your manifest does not advertise—explicitly annotate gaps (“Sentinel backlog item #123”) instead of placeholders that read as executable content.
+Avoid shipping vendor-specific artefacts your manifest does not advertise—explicitly annotate gaps ("Sentinel backlog item #123") instead of placeholders that read as executable content.

@@ -246,7 +246,7 @@ Detection searches then run against the summary index instead of raw events.
 | `parse_json()` | `spath` |
 | `extend` | `eval` |
 | `let var = ...` | `| eval` early in pipeline, or saved macro |
-| Comments `//` | `\`\`\` block comment \`\`\` ` (literally three backticks both sides) |
+| Comments `//` | Triple-backtick block comments (see §7 below) |
 
 **Critical mindset shift**: `join` in SPL is expensive at scale. Use `lookup` for static reference data, `subsearch` (`search ... [search ...]`) for small primary sets, or accelerated data models for cross-sourcetype correlation.
 

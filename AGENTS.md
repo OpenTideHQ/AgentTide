@@ -94,11 +94,11 @@ Unless explicitly commissioned:
 | `microsoft-sentinel` | Sentinel / Log Analytics specifics — table domain matrix, ResultType codes, NRT vs scheduled rules, ASIM, TI patterns (+ `references/Anti-Patterns.md`) |
 | `microsoft-defender-endpoint` | Defender Advanced Hunting specifics — Device*/Email* schemas, mandatory output columns, FileProfile, AdditionalFields, NRT constraints (+ `references/Anti-Patterns.md`) |
 | `entra-id-protection` | Entra ID identity-attack detection — sign-in/user risk, SKU gating, ResultType codes, AiTM/MFA fatigue/OAuth abuse patterns (+ `references/ResultType-Codes.md`) |
-| `windows-event-logs` | Windows native event IDs (Security/Sysmon/PowerShell), audit policy prerequisites, platform table mapping |
+| `windows-event-logs` | Windows native event IDs (Security/Sysmon/PowerShell), audit policy prerequisites, platform table mapping (+ `references/Audit-Policy-Matrix.md`) |
 | `splunk-spl-processing` | SPL for Splunk Enterprise / ES — index/sourcetype discipline, stats vs tstats vs mstats, accelerated DMs, ES correlation searches, RBA (+ `references/Anti-Patterns.md`) |
-| `crowdstrike-falcon` | Falcon surface map (Insight FQL, NG-SIEM CQL, Custom IOA/IOC, Fusion, RTR), Storyline ID correlation, sensor coverage |
+| `crowdstrike-falcon` | Falcon surface map (Insight FQL, NG-SIEM CQL, Custom IOA/IOC, Fusion, RTR), Storyline ID correlation, sensor coverage (+ `references/FQL-Field-Reference.md`) |
 | `carbon-black-cloud` | Carbon Black Cloud Enterprise EDR — Watchlist Reports, scheduled searches, process_guid correlation, Live Response |
-| `sentinelone-singularity` | SentinelOne Singularity (NOT Microsoft Sentinel) — STAR Custom Logic, DVQL, PowerQuery / SDL, Storyline ID, exclusion discipline |
+| `sentinelone-singularity` | SentinelOne Singularity (NOT Microsoft Sentinel) — STAR Custom Logic, DVQL, PowerQuery / SDL, Storyline ID, exclusion discipline (+ `references/DVQL-Field-Reference.md`) |
 | `harfanglab` | HarfangLab orb — Sigma rule packs, RHQL hunting, YARA, custom detection rules |
 
 Load the **narrowest** skill first — escalate outward when coordination demands. For any KQL surface always pair `kusto-query-language` with the relevant Microsoft platform skill.

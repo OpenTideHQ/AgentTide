@@ -193,7 +193,56 @@ When CBC content lives in `configurations.carbon_black_cloud`:
 
 ---
 
-## 11. Quality checklist
+## 11. Worked detection patterns
+
+### LSASS credential dumping
+
+```
+process_name:rundll32.exe AND process_cmdline:*comsvcs* AND process_cmdline:*MiniDump*
+```
+
+Watchlist Report: Severity 8, MITRE T1003.001. FP: legitimate crash dump tools — check `parent_name` for expected dump utilities.
+
+### Encoded PowerShell execution
+
+```
+process_name:powershell.exe AND process_cmdline:*-EncodedCommand*
+    AND -parent_name:ccmexec.exe
+```
+
+Watchlist Report: Severity 6, MITRE T1059.001. FP: SCCM/ConfigMgr deployments use `-EncodedCommand` legitimately — exclude `ccmexec.exe` parent.
+
+### Suspicious service installation (PsExec pattern)
+
+```
+device_os:WINDOWS AND process_name:psexesvc.exe
+```
+
+Watchlist Report: Severity 7, MITRE T1569.002. FP: legitimate admin use of PsExec — correlate with `process_username` and time of day.
+
+### Scheduled task persistence
+
+```
+process_name:schtasks.exe AND process_cmdline:*/create* AND process_cmdline:*AppData*
+```
+
+Watchlist Report: Severity 5, MITRE T1053.005. FP: some legitimate software creates tasks in AppData — check `process_effective_reputation`.
+
+### Outbound connection to rare port
+
+```
+device_os:WINDOWS AND netconn_action:ACTION_CONNECTION_CREATE
+    AND netconn_remote_port:4444
+    AND -netconn_remote_ipv4:10.0.0.0/8
+    AND -netconn_remote_ipv4:172.16.0.0/12
+    AND -netconn_remote_ipv4:192.168.0.0/16
+```
+
+Scheduled Search: common Metasploit/Meterpreter default port. Adjust port list per threat intel.
+
+---
+
+## 12. Quality checklist
 
 - [ ] Surface identified (Watchlist Report / Scheduled Search / IOC).
 - [ ] One TTP per Report.

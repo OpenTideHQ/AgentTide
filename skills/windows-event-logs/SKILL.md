@@ -250,3 +250,9 @@ SecurityEvent
 - [ ] XML parsing avoided when pre-parsed columns exist.
 - [ ] Sysmon vs Defender native telemetry overlap considered.
 - [ ] MITRE ATT&CK data components aligned with the event source.
+
+---
+
+## 10. Reference catalogues
+
+- `references/Audit-Policy-Matrix.md` — Comprehensive EID-to-audit-policy mapping, Sysmon config requirements, PowerShell GPO paths, and minimum audit policy sets per detection goal.

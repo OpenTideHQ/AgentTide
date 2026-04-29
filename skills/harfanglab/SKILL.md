@@ -78,8 +78,27 @@ level: high
 
 ### HarfangLab-specific Sigma extensions
 
-- Some HarfangLab telemetry fields don't map 1:1 to canonical Sigma field names. Vendor documentation lists field mappings; cross-reference before assuming a Sigma field exists.
+- Some HarfangLab telemetry fields don't map 1:1 to canonical Sigma field names. Cross-reference the mapping table below before assuming a Sigma field exists.
 - Custom logsources for HarfangLab-specific telemetry channels.
+
+### Sigma logsource mapping for HarfangLab
+
+| Sigma `product` | Sigma `category` | HarfangLab telemetry | Notes |
+|---|---|---|---|
+| `windows` | `process_creation` | Process events | Maps to Sysmon EID 1 equivalent. `Image`, `CommandLine`, `ParentImage` fields. |
+| `windows` | `file_event` | File events | File creation/modification. `TargetFilename` field. |
+| `windows` | `registry_event` | Registry events | Key/value changes. `TargetObject`, `Details` fields. |
+| `windows` | `network_connection` | Network events | Outbound connections. `DestinationIp`, `DestinationPort` fields. |
+| `windows` | `dns_query` | DNS events | DNS resolution. `QueryName` field. |
+| `windows` | `image_load` | Module load events | DLL loads. `ImageLoaded`, `Signed`, `Signature` fields. |
+| `windows` | `pipe_created` | Named pipe events | Pipe creation. `PipeName` field. |
+| `windows` | `driver_load` | Driver events | Driver loads. `ImageLoaded` field. |
+| `windows` | `ps_script` | PowerShell events | Script block content. `ScriptBlockText` field. |
+| `windows` | `ps_module` | PowerShell events | Module logging. |
+| `linux` | `process_creation` | Linux process events | Linux process telemetry. Field names may differ from Windows. |
+| `macos` | `process_creation` | macOS process events | macOS process telemetry. |
+
+**Critical rule**: If a Sigma `logsource` combination is not in this table, the rule may not fire on HarfangLab. Verify against vendor documentation before deploying.
 
 ---
 
@@ -105,6 +124,40 @@ process.image.path matches ".*\\powershell\\.exe$"
 | `| group by`, `| count`, `| sort` | Pipeline aggregation |
 
 Confirm exact syntax against vendor documentation before authoring — RHQL evolves between versions.
+
+### Worked RHQL patterns
+
+**Encoded PowerShell execution:**
+```
+process.image.path matches ".*\\\\powershell\\.exe$"
+    and process.command_line contains "-EncodedCommand"
+    and not process.parent.image.path matches ".*\\\\ccmexec\\.exe$"
+| group by host.name, process.user
+```
+
+**LSASS access (credential dumping):**
+```
+process.target.image.path matches ".*\\\\lsass\\.exe$"
+    and process.access.granted_access contains "0x1010"
+    and not process.image.path matches ".*\\\\(MsMpEng|csrss|svchost)\\.exe$"
+```
+
+**Suspicious service creation:**
+```
+event.type == "service_creation"
+    and service.image_path contains "cmd.exe"
+    or service.image_path contains "powershell.exe"
+| group by host.name, service.name
+```
+
+**DNS to suspicious TLD:**
+```
+dns.query matches ".*\\.(top|xyz|tk|ml|ga|cf|buzz)$"
+    and not dns.query in ["known-good.xyz"]
+| group by host.name, dns.query
+| count
+| sort -count
+```
 
 ---
 

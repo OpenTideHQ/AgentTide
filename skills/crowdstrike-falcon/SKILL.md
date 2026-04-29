@@ -223,3 +223,9 @@ When Falcon content lives in `configurations.crowdstrike` blocks:
 - [ ] Fusion workflows reviewed for destructive actions; auto-containment guarded.
 - [ ] RTR scripts authored manually before automation.
 - [ ] Entity identifiers documented for cross-platform correlation.
+
+---
+
+## 12. Reference catalogues
+
+- `references/FQL-Field-Reference.md` — FQL event types, field names by category (process, network, DNS, file, registry, auth), CQL differences, and Custom IOA field mapping.

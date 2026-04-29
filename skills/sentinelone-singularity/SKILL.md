@@ -92,6 +92,49 @@ EventType = "DNS Resolved" AND DNS.Request EndsWith ".evil.example"
 - `endpoint.name` / `endpoint.ip` — host context.
 - `user.name` — interactive user.
 
+### Worked DVQL patterns
+
+**Encoded PowerShell execution:**
+```
+EventType = "Process Creation"
+    AND process.name Is "powershell.exe"
+    AND process.command_line ContainsCIS "-encodedcommand"
+    AND NOT process.parent.name Is "ccmexec.exe"
+```
+
+**LSASS access (credential dumping):**
+```
+EventType = "Process Creation"
+    AND (process.command_line ContainsCIS "lsass"
+        OR process.command_line ContainsCIS "sekurlsa")
+    AND process.name In Contains Anycase ("rundll32.exe", "procdump.exe", "mimikatz.exe")
+```
+
+**Named pipe C2 (Cobalt Strike default patterns):**
+```
+EventType = "Named Pipe Creation"
+    AND (tgt.file.path Matches "\\\\MSSE-.*"
+        OR tgt.file.path Matches "\\\\postex_.*"
+        OR tgt.file.path Matches "\\\\msagent_.*")
+```
+
+**Suspicious outbound connection to rare port:**
+```
+EventType = "IP Connect"
+    AND network.direction Is "OUTGOING"
+    AND dst.port.number In (4444, 8443, 8080, 1337)
+    AND NOT dst.ip.address StartsWith "10."
+    AND NOT dst.ip.address StartsWith "172.16."
+    AND NOT dst.ip.address StartsWith "192.168."
+```
+
+**Storyline pivot (expand from a known-bad process):**
+```
+process.storyline.id Is "<UUID from initial alert>"
+```
+
+This returns the entire causal chain — all processes, files, network connections, and registry changes linked to the same Storyline.
+
 ---
 
 ## 4. Singularity Data Lake / PowerQuery
@@ -119,6 +162,35 @@ $source != "" agentName == "S1Agent" message contains "powershell.exe"
 | `| join` | Cross-stream joins |
 
 PowerQuery's pipeline shape is closer to SPL than KQL — work flows top-down through commands. Filtering as early as possible against indexed fields remains the dominant performance rule.
+
+### Worked PowerQuery patterns
+
+**Brute-force detection (authentication failures):**
+```
+$source != "" event.type == "authentication" event.outcome == "failure"
+| group count() as fail_count by user.name, source.ip
+| filter fail_count > 50
+| sort -fail_count
+```
+
+**Beaconing detection (connection interval consistency):**
+```
+$source != "" event.type == "network_connection" network.direction == "outgoing"
+| group count() as conn_count, min(timestamp) as first, max(timestamp) as last
+    by endpoint.name, dst.ip.address
+| filter conn_count > 20
+| let avg_interval = (last - first) / (conn_count - 1)
+| sort -conn_count
+```
+
+**Rare process per endpoint (anomaly):**
+```
+$source != "" event.type == "process_creation"
+| group count() as exec_count, countDistinct(endpoint.name) as host_count
+    by process.name
+| filter host_count <= 3
+| sort host_count
+```
 
 ### Scheduled queries
 
@@ -231,3 +303,9 @@ When SentinelOne content lives in `configurations.sentinel_one`:
 - [ ] Sensor / SKU coverage declared in MDR description.
 - [ ] MITRE mapping in rule metadata + MDR description.
 - [ ] FP / triage guidance written for analysts seeing the alert.
+
+---
+
+## 11. Reference catalogues
+
+- `references/DVQL-Field-Reference.md` — DVQL event types, field names by category (process, endpoint, network, DNS, file, registry, module), operator syntax, PowerQuery differences, and cross-platform entity alignment.

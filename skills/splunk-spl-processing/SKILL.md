@@ -209,13 +209,15 @@ Detection searches then run against the summary index instead of raw events.
 | sort - count
 
 // Beaconing detection (interval consistency)
+index=proxy sourcetype=proxy_logs earliest=-7d@d
 | stats min(_time) AS first_seen max(_time) AS last_seen count AS conn_count
     list(_time) AS times
     by src dest dest_port
 | where conn_count > 20
-| eval intervals = mvmap(times, _time-prev_time)
-| eval mean_interval = avg(intervals), stdev_interval = stdev(intervals)
-| where stdev_interval / mean_interval < 0.2
+| eval intervals = mvrange(first_seen, last_seen, (last_seen - first_seen) / conn_count)
+| eval mean_interval = (last_seen - first_seen) / (conn_count - 1)
+| eval stdev_interval = stdev(mvmap(times, _time - first_seen))
+| where (stdev_interval / mean_interval) < 0.2
 
 // Impossible travel (per-user pairwise)
 | sort 0 user, _time
@@ -291,3 +293,9 @@ When SPL is wired into a `configurations.splunk` block in an OpenTide MDR object
 - Description, tuning narrative, severity, response procedure → MDR `description` and `response.*` fields per MDR schema.
 - Inline SPL still carries the header block and comment discipline above.
 - Coordinate with `opentide-detection-rule` for placement and `detection-engineering` for hunt-to-rule conversion.
+
+---
+
+## 10. Reference catalogues
+
+- `references/Anti-Patterns.md` — AP-S1 through AP-S12 SPL anti-pattern rejection checklist.

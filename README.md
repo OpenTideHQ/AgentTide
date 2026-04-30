@@ -34,32 +34,13 @@ This means you can have dozens of skills available without bloating the agent's 
 
 ```mermaid
 flowchart LR
-    subgraph Discovery["1 · Discovery"]
-        A["Agent starts"] --> B["Scan .agents/skills/"]
-        B --> C["Read name + description\nfrom each SKILL.md\n~100 tokens per skill"]
-    end
-
-    subgraph Activation["2 · Activation"]
-        D["User prompt\nor task context"] --> E{"Match skill\ndescription?"}
-        E -- Yes --> F["Load full SKILL.md\ninto context"]
-        E -- No --> G["Skip — zero cost"]
-    end
-
-    subgraph Execution["3 · Execution"]
-        F --> H["Follow instructions"]
-        H --> I{"Need references\nor scripts?"}
-        I -- Yes --> J["Load references/\nor run scripts/"]
-        I -- No --> K["Generate output"]
-        J --> K
-    end
-
-    C --> D
-    K --> L["Detection content\nTVM · DOM · MDR"]
-
-    style Discovery fill:#1a1a2e,stroke:#4a4a8a,color:#eee
-    style Activation fill:#16213e,stroke:#4a4a8a,color:#eee
-    style Execution fill:#0f3460,stroke:#4a4a8a,color:#eee
-    style L fill:#e94560,stroke:#e94560,color:#fff
+    A[Scan skills] --> B{Match?}
+    B -- Yes --> C[Load SKILL.md]
+    B -- No --> D[Skip]
+    C --> E[Execute]
+    E --> F[Load refs if needed]
+    F --> G[TVM · DOM · MDR]
+    style G fill:#e94560,stroke:#e94560,color:#fff
 ```
 
 > **Why not just paste documentation into the prompt?** Skills are version-controlled, shareable across teams, and work identically across every compatible agent product. Write once, use everywhere.

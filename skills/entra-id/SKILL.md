@@ -1,6 +1,6 @@
 ---
 name: entra-id
-description: Microsoft Entra ID (formerly Azure AD) — identity platform internals, telemetry, and attack detection. Covers the full Entra ID surface including sign-in logs (interactive, non-interactive, service principal, managed identity), audit logs, Identity Protection risk signals, Conditional Access evaluation, directory role management, OAuth/consent grants, PRT/token mechanics, cross-tenant B2B/B2C, and workload identities. Includes SKU gating (P1 vs P2), ResultType code catalogue, identity attack patterns (password spray, AiTM, MFA fatigue, token theft, OAuth abuse, Golden SAML), and entity alignment for cross-platform correlation. Use for any work involving Entra ID telemetry, identity-focused detection, or directory security posture. Pair with microsoft-sentinel for query mechanics.
+description: Microsoft Entra ID (formerly Azure AD) — identity platform internals, telemetry, and attack detection. Covers the full Entra ID surface including sign-in logs (interactive, non-interactive, service principal, managed identity), audit logs, Identity Protection risk signals, Conditional Access evaluation, directory role management, OAuth/consent grants, PRT/token mechanics, cross-tenant B2B/B2C, and workload identities. Includes SKU gating (P1 vs P2), ResultType code catalogue, identity attack patterns (password spray, AiTM, MFA fatigue, token theft, OAuth abuse, Golden SAML), and entity alignment for cross-platform correlation. Use for any work involving Entra ID telemetry, identity-focused detection, or directory security posture. Pair with the relevant platform skill for query mechanics (microsoft-sentinel, splunk-spl-processing, crowdstrike-falcon, etc.).
 ---
 
 # Microsoft Entra ID — identity platform & detection
@@ -14,7 +14,7 @@ Use this skill when working with:
 - **Cross-tenant scenarios** — B2B guest access, cross-tenant synchronisation, external identities
 - **Workload identities** — service principals, managed identities, federated credentials
 
-> **Naming**: "Azure AD" was renamed to "Microsoft Entra ID" in July 2023. Sentinel tables retain the legacy names (`SigninLogs`, `AADNonInteractiveUserSignInLogs`, `AuditLogs`). This skill uses "Entra ID" for the product and the legacy table names for queries.
+> **Naming**: "Azure AD" was renamed to "Microsoft Entra ID" in July 2023. The diagnostic log categories retain the legacy names (`SigninLogs`, `AADNonInteractiveUserSignInLogs`, `AuditLogs`). These names are used by Sentinel, but the same data is available in any SIEM via Event Hubs, Graph API, or diagnostic settings — field names and schemas are identical regardless of destination. This skill uses "Entra ID" for the product and the canonical log category names throughout.
 
 ---
 
@@ -34,20 +34,24 @@ Entra ID is a **multi-tenant, cloud-based identity and access management service
 | **Identity Protection** | Risk-based detection engine (P2) that scores sign-in risk and user risk. |
 | **PIM (Privileged Identity Management)** | Just-in-time role activation for privileged roles (P2). |
 
-### Key log sources in Sentinel
+### Entra ID log categories
 
-| Log table | What it captures | Licence |
-|-----------|-----------------|---------|
-| `SigninLogs` | Interactive user sign-ins | Free (limited), P1, P2 |
-| `AADNonInteractiveUserSignInLogs` | Token refreshes, background app activity, SSO | P1, P2 |
-| `ServicePrincipalSignInLogs` | Service principal (app) authentications | P1, P2 |
-| `ManagedIdentitySignInLogs` | Managed identity authentications | P1, P2 |
-| `AuditLogs` | Directory changes (user/group/role/app/policy CRUD) | Free, P1, P2 |
-| `AADRiskyUsers` | User risk state and history (P2) | P2 |
-| `AADUserRiskEvents` | Individual risk detections (P2) | P2 |
-| `AADRiskyServicePrincipals` | Workload identity risk (P2) | P2 |
-| `AADProvisioningLogs` | Cross-tenant sync, HR provisioning | P1, P2 |
-| `NetworkAccessTrafficLogs` | Global Secure Access (Entra Internet/Private Access) | Separate licence |
+These are the canonical diagnostic log categories emitted by Entra ID. The names below are used in Sentinel, but the **same schema and field names** apply when ingested into Splunk (via Event Hubs / Azure Monitor Add-on), CrowdStrike NG-SIEM, Elastic, or any other SIEM.
+
+| Log category | What it captures | Licence | Ingestion path |
+|-------------|-----------------|---------|----------------|
+| `SigninLogs` | Interactive user sign-ins | Free (limited), P1, P2 | Diagnostic settings, Graph API |
+| `NonInteractiveUserSignInLogs` | Token refreshes, background app activity, SSO | P1, P2 | Diagnostic settings |
+| `ServicePrincipalSignInLogs` | Service principal (app) authentications | P1, P2 | Diagnostic settings |
+| `ManagedIdentitySignInLogs` | Managed identity authentications | P1, P2 | Diagnostic settings |
+| `AuditLogs` | Directory changes (user/group/role/app/policy CRUD) | Free, P1, P2 | Diagnostic settings, Graph API |
+| `RiskyUsers` | User risk state and history | P2 | Graph API |
+| `UserRiskEvents` | Individual risk detections | P2 | Graph API |
+| `RiskyServicePrincipals` | Workload identity risk | P2 | Graph API |
+| `ProvisioningLogs` | Cross-tenant sync, HR provisioning | P1, P2 | Diagnostic settings |
+| `NetworkAccessTrafficLogs` | Global Secure Access (Entra Internet/Private Access) | Separate licence | Diagnostic settings |
+
+> **SIEM mapping note**: In Sentinel, `NonInteractiveUserSignInLogs` maps to the `AADNonInteractiveUserSignInLogs` table. In Splunk, the same data arrives via the `azure:aad:signin` sourcetype. In Elastic, it lands in `azure.signinlogs`. The **field names within each record** (e.g., `ResultType`, `UserPrincipalName`, `IPAddress`) are consistent across all destinations because they originate from the same Entra ID diagnostic schema.
 
 ---
 
@@ -126,7 +130,7 @@ Two distinct risk models that are often confused:
 Multiple failed sign-ins (50126/50053) from one IP across many users in a short window.
 ```
 
-| Signal | Table | Key columns |
+| Signal | Log category | Key fields |
 |---|---|---|
 | High failure count per IP | `SigninLogs` | `IPAddress`, `ResultType`, `UserPrincipalName` |
 | Many distinct users per IP | `SigninLogs` | `dcount(UserPrincipalName) by IPAddress` |
@@ -138,7 +142,7 @@ Multiple failed sign-ins (50126/50053) from one IP across many users in a short 
 Repeated MFA denials (500121) for one user in a short window, followed by a success (0).
 ```
 
-| Signal | Table | Key columns |
+| Signal | Log category | Key fields |
 |---|---|---|
 | MFA denial burst | `SigninLogs` | `ResultType == "500121"`, `UserPrincipalName` |
 | Subsequent success | `SigninLogs` | `ResultType == "0"` within N minutes |
@@ -150,7 +154,7 @@ Repeated MFA denials (500121) for one user in a short window, followed by a succ
 Successful sign-in from a known AiTM proxy infrastructure, often with anomalous user agent or session token replay.
 ```
 
-| Signal | Table | Key columns |
+| Signal | Log category | Key fields |
 |---|---|---|
 | Risky sign-in + anomalous UA | `SigninLogs` | `RiskLevelDuringSignIn`, `UserAgent` |
 | Session token replay | `SigninLogs` | `CorrelationId`, `TokenIssuerType` |
@@ -162,7 +166,7 @@ Successful sign-in from a known AiTM proxy infrastructure, often with anomalous 
 Malicious application granted permissions via user or admin consent, enabling persistent access without credentials.
 ```
 
-| Signal | Table | Key columns |
+| Signal | Log category | Key fields |
 |---|---|---|
 | New consent grant | `AuditLogs` | `OperationName == "Consent to application"` |
 | High-privilege permissions | `AuditLogs` | `TargetResources[0].modifiedProperties` |
@@ -174,7 +178,7 @@ Malicious application granted permissions via user or admin consent, enabling pe
 Modification of Conditional Access policies to remove MFA requirements or exclude privileged roles.
 ```
 
-| Signal | Table | Key columns |
+| Signal | Log category | Key fields |
 |---|---|---|
 | CA policy modification | `AuditLogs` | `OperationName has "conditional access"` |
 | MFA requirement removed | `AuditLogs` | `TargetResources` JSON parsing |
@@ -186,7 +190,7 @@ Modification of Conditional Access policies to remove MFA requirements or exclud
 Anomalous service principal sign-in from unexpected IP or with unexpected permissions.
 ```
 
-| Signal | Table | Key columns |
+| Signal | Log category | Key fields |
 |---|---|---|
 | SP sign-in anomaly | `ServicePrincipalSignInLogs` | `ServicePrincipalId`, `IPAddress` |
 | New credential added to SP | `AuditLogs` | `OperationName == "Add service principal credentials"` |
@@ -196,18 +200,19 @@ Anomalous service principal sign-in from unexpected IP or with unexpected permis
 
 ## 5. Telemetry split — user vs service principal vs managed identity
 
-| Principal type | Sign-in table | Audit table |
+| Principal type | Sign-in log category | Audit log category |
 |---|---|---|
 | Interactive user | `SigninLogs` | `AuditLogs` |
-| Non-interactive user | `AADNonInteractiveUserSignInLogs` | `AuditLogs` |
+| Non-interactive user | `NonInteractiveUserSignInLogs` | `AuditLogs` |
 | Service principal | `ServicePrincipalSignInLogs` | `AuditLogs` |
 | Managed identity | `ManagedIdentitySignInLogs` | `AuditLogs` |
 
-**Common mistake**: Querying only `SigninLogs` and missing non-interactive sign-ins. Token refresh, background app activity, and service-to-service calls appear in `AADNonInteractiveUserSignInLogs` or `ServicePrincipalSignInLogs`.
+**Common mistake**: Querying only interactive sign-ins and missing non-interactive activity. Token refresh, background app activity, and service-to-service calls appear in the non-interactive and service principal log categories.
 
-For comprehensive identity coverage, union the relevant tables:
+For comprehensive identity coverage, query across all relevant sign-in categories. Example (KQL — adapt to your SIEM's query language):
 
 ```kql
+// Sentinel / KQL example — adapt for Splunk, Elastic, etc.
 union isfuzzy=true SigninLogs, AADNonInteractiveUserSignInLogs
 | where TimeGenerated > ago(14d)
 | where ResultType == "0"
@@ -378,6 +383,8 @@ Cross-platform correlation happens at the SIEM/SOAR layer. The `UserPrincipalNam
 
 ## 12. Detection cheatsheet — quick-reference queries
 
+> The examples below use KQL (Sentinel). The **logic and field names are portable** — adapt the syntax to your SIEM (SPL for Splunk, EQL/ES|QL for Elastic, CQL for CrowdStrike NG-SIEM, etc.).
+
 ### Password spray (high-volume failed auth from single IP)
 
 ```kql
@@ -462,4 +469,4 @@ SigninLogs
 - [ ] Dangerous application permissions flagged in consent-based detections.
 - [ ] FOCI token sharing considered for token theft scope assessment.
 - [ ] MITRE technique mapping accurate (T1078, T1098, T1556, T1621, T1557 as applicable).
-- [ ] Coordinate with `microsoft-sentinel` for query mechanics and `detection-engineering` for lifecycle.
+- [ ] Coordinate with the relevant platform skill for query mechanics (`microsoft-sentinel`, `splunk-spl-processing`, `crowdstrike-falcon`, etc.) and `detection-engineering` for lifecycle.

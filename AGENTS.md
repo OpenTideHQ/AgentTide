@@ -175,7 +175,7 @@ Unless explicitly commissioned:
 | `kusto-query-language` | Vendor-neutral KQL — operator hierarchy, joins, FP engineering, anti-patterns (+ `references/Best-Practices.md`, `references/Hypothesis-Anti-Patterns.md`) |
 | `microsoft-sentinel` | Sentinel / Log Analytics specifics — table domain matrix, ResultType codes, NRT vs scheduled rules, ASIM, TI patterns (+ `references/Anti-Patterns.md`) |
 | `microsoft-defender-endpoint` | Defender Advanced Hunting specifics — Device*/Email* schemas, mandatory output columns, FileProfile, AdditionalFields, NRT constraints (+ `references/Anti-Patterns.md`) |
-| `entra-id-protection` | Entra ID identity-attack detection — sign-in/user risk, SKU gating, ResultType codes, AiTM/MFA fatigue/OAuth abuse patterns (+ `references/ResultType-Codes.md`) |
+| `entra-id` | Microsoft Entra ID — identity platform internals, telemetry surfaces, SKU gating, ResultType codes, directory roles, PIM, token mechanics, OAuth/consent, attack patterns (+ `references/ResultType-Codes.md`) |
 | `windows-event-logs` | Windows native event IDs (Security/Sysmon/PowerShell), audit policy prerequisites, platform table mapping (+ `references/Audit-Policy-Matrix.md`) |
 | `splunk-spl-processing` | SPL for Splunk Enterprise / ES — index/sourcetype discipline, stats vs tstats vs mstats, accelerated DMs, ES correlation searches, RBA (+ `references/Anti-Patterns.md`) |
 | `crowdstrike-falcon` | Falcon surface map (Insight FQL, NG-SIEM CQL, Custom IOA/IOC, Fusion, RTR), Storyline ID correlation, sensor coverage (+ `references/FQL-Field-Reference.md`) |

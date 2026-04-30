@@ -7,6 +7,8 @@ description: M365 email and collaboration security telemetry for detection engin
 
 This skill encodes how M365 email and collaboration services work at the level needed to detect BEC, phishing, data exfiltration, and insider threats through these channels.
 
+> **Scope**: This skill covers Microsoft 365 (Exchange Online, SharePoint, OneDrive, Teams). Google Workspace, Slack, and other collaboration platforms are not covered. SIEM table names vary by platform — consult the relevant platform skill for ingestion specifics.
+
 ---
 
 ## 1. Exchange Online mail flow
@@ -135,8 +137,7 @@ The UAL is the central audit log for all M365 services. Key considerations:
 | **Retention** | 180 days (E5/Audit Premium) or 90 days (standard) |
 | **Latency** | 60-90 minutes typical; can be up to 24 hours for some workloads |
 | **Search** | `Search-UnifiedAuditLog` PowerShell cmdlet or Purview compliance portal |
-| **Sentinel ingestion** | Via `OfficeActivity` table (legacy connector) or `Office365` solution |
-| **Defender ingestion** | `CloudAppEvents` table |
+| **SIEM ingestion** | Via diagnostic settings, Office 365 Management Activity API, or platform-specific connectors. Consult your platform skill for table names. |
 
 ### Critical UAL record types
 
@@ -163,7 +164,7 @@ The UAL is the central audit log for all M365 services. Key considerations:
 4. Attacker sends fraudulent payment instructions from compromised account
 ```
 
-**Detection chain**: `SigninLogs` (risky sign-in) → `OfficeActivity` (New-InboxRule with external forwarding) → `EmailEvents` (sent mail with financial keywords).
+**Detection chain**: Risky sign-in event → inbox rule creation (forward/redirect to external) → outbound email with financial keywords. Correlate across identity logs, UAL, and email delivery logs.
 
 ### Pattern 2: OAuth consent phishing → persistent access
 
@@ -174,7 +175,7 @@ The UAL is the central audit log for all M365 services. Key considerations:
 4. Access persists even after password change
 ```
 
-**Detection**: `AuditLogs` (Consent to application) with high-privilege permissions (`Mail.Read`, `Files.ReadWrite.All`). App not in organisation's approved list.
+**Detection**: Consent grant event with high-privilege permissions (`Mail.Read`, `Files.ReadWrite.All`). App not in organisation's approved list. See `entra-id` skill for consent monitoring.
 
 ### Pattern 3: Insider threat — bulk data exfiltration
 
@@ -188,20 +189,21 @@ The UAL is the central audit log for all M365 services. Key considerations:
 
 ---
 
-## 9. Telemetry mapping
+## 9. Telemetry sources
 
-| M365 operation | Sentinel table | Defender table |
-|---|---|---|
-| Email delivery | `OfficeActivity` | `EmailEvents` |
-| Email URL clicks | — | `UrlClickEvents` |
-| Email attachments | — | `EmailAttachmentInfo` |
-| Post-delivery actions (ZAP) | — | `EmailPostDeliveryEvents` |
-| Inbox rule changes | `OfficeActivity` | `CloudAppEvents` |
-| Mailbox config changes | `OfficeActivity` | `CloudAppEvents` |
-| SharePoint file operations | `OfficeActivity` | `CloudAppEvents` |
-| Teams operations | `OfficeActivity` | `CloudAppEvents` |
-| MailItemsAccessed | `OfficeActivity` (E5) | `CloudAppEvents` |
-| UAL (all) | `OfficeActivity` | `CloudAppEvents` |
+| M365 operation | UAL operation name | API source | Licence |
+|---|---|---|---|
+| Email delivery | `MailItemsAccessed`, `Send` | Office 365 Management Activity API | E3/E5 |
+| Email URL clicks | `ClickData` | Defender for Office 365 API | Defender P1/P2 |
+| Email attachments | (embedded in delivery events) | Defender for Office 365 API | Defender P1/P2 |
+| Post-delivery actions (ZAP) | `ZAP` | Defender for Office 365 API | Defender P1/P2 |
+| Inbox rule changes | `New-InboxRule`, `Set-InboxRule` | Office 365 Management Activity API | E3/E5 |
+| Mailbox config changes | `Set-Mailbox` | Office 365 Management Activity API | E3/E5 |
+| SharePoint file operations | `FileDownloaded`, `FileUploaded`, `AnonymousLinkCreated` | Office 365 Management Activity API | E3/E5 |
+| Teams operations | `MemberAdded`, `ChatCreated` | Office 365 Management Activity API | E3/E5 |
+| MailItemsAccessed | `MailItemsAccessed` | Office 365 Management Activity API | E5 / Audit Premium |
+
+> Map these operations to your SIEM's tables/indexes. Consult the relevant platform skill (`microsoft-sentinel`, `splunk-spl-processing`, etc.) for ingestion specifics.
 
 ---
 

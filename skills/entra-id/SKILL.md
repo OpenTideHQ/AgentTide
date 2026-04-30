@@ -71,13 +71,7 @@ Identity Protection features are **licence-dependent**. Detection content must d
 | `ManagedIdentitySignInLogs` | Yes | Yes | No |
 | `ServicePrincipalSignInLogs` | Yes | Yes | No |
 
-**Rule**: Always use `column_ifexists()` for P2-only columns. A detection that filters on `RiskLevelDuringSignIn == "high"` silently returns zero results in P1 tenants — the column exists but contains only `"none"`.
-
-```kql
-// Safe pattern for P2-optional risk filtering
-| extend RiskLevel = column_ifexists("RiskLevelDuringSignIn", "unknown")
-| where RiskLevel in ("medium", "high") or RiskLevel == "unknown"
-```
+**Gotcha**: A detection that filters on `RiskLevelDuringSignIn == "high"` silently returns zero results in P1 tenants — the column exists but contains only `"none"`. In KQL, use `column_ifexists()` for P2-only columns. In SPL/other SIEMs, apply equivalent null-safe field access. Always declare the SKU tier requirement in detection content.
 
 ---
 
@@ -122,79 +116,54 @@ Two distinct risk models that are often confused:
 
 ---
 
-## 4. Identity attack patterns
+## 4. Detection-relevant platform behaviours
 
-### 4.1 Password spray
+The signals below describe **what Entra ID emits** when specific identity-layer activity occurs. They are not attack descriptions — pair with threat vector objects (TVMs) for adversary context.
 
-```
-Multiple failed sign-ins (50126/50053) from one IP across many users in a short window.
-```
+### 4.1 Credential failure patterns
 
 | Signal | Log category | Key fields |
 |---|---|---|
-| High failure count per IP | `SigninLogs` | `IPAddress`, `ResultType`, `UserPrincipalName` |
-| Many distinct users per IP | `SigninLogs` | `dcount(UserPrincipalName) by IPAddress` |
-| Residential proxy infrastructure | `SigninLogs` | `IPAddress` + TI enrichment |
+| High failure rate per IP | `SigninLogs` | `IPAddress`, `ResultType` (`"50126"`, `"50053"`, `"50064"`), `UserPrincipalName` |
+| Many distinct users per IP | `SigninLogs` | `UserPrincipalName` (distinct count), `IPAddress` |
+| Account lockout triggered | `SigninLogs` | `ResultType == "50053"` |
+| Disabled account access attempt | `SigninLogs` | `ResultType == "50057"` |
 
-### 4.2 MFA fatigue / push bombing
-
-```
-Repeated MFA denials (500121) for one user in a short window, followed by a success (0).
-```
+### 4.2 MFA challenge signals
 
 | Signal | Log category | Key fields |
 |---|---|---|
 | MFA denial burst | `SigninLogs` | `ResultType == "500121"`, `UserPrincipalName` |
-| Subsequent success | `SigninLogs` | `ResultType == "0"` within N minutes |
-| Non-standard user agent | `SigninLogs` | `UserAgent` |
+| MFA success after denials | `SigninLogs` | `ResultType == "0"` following `"500121"` for same user |
+| MFA call limit reached | `SigninLogs` | `ResultType == "50088"` |
+| Risky MFA enrolment blocked | `SigninLogs` | `ResultType == "53004"` |
 
-### 4.3 AiTM / adversary-in-the-middle phishing
-
-```
-Successful sign-in from a known AiTM proxy infrastructure, often with anomalous user agent or session token replay.
-```
+### 4.3 Token and session anomalies
 
 | Signal | Log category | Key fields |
 |---|---|---|
-| Risky sign-in + anomalous UA | `SigninLogs` | `RiskLevelDuringSignIn`, `UserAgent` |
-| Session token replay | `SigninLogs` | `CorrelationId`, `TokenIssuerType` |
-| Immediate inbox rule creation | `OfficeActivity` | `Operation in ("New-InboxRule", "Set-InboxRule")` |
+| Sign-in with elevated risk | `SigninLogs` | `RiskLevelDuringSignIn` (P2 only) |
+| Token replay indicator | `SigninLogs` | `CorrelationId`, `TokenIssuerType`, `IPAddress` mismatch |
+| Non-interactive sign-in from new device | `NonInteractiveUserSignInLogs` | `DeviceDetail`, `IPAddress` |
+| PRT usage indicator | `SigninLogs` | `AuthenticationProcessingDetails` contains `"Is Primary Refresh Token"` |
 
-### 4.4 OAuth / consent abuse
-
-```
-Malicious application granted permissions via user or admin consent, enabling persistent access without credentials.
-```
+### 4.4 Consent and application changes
 
 | Signal | Log category | Key fields |
 |---|---|---|
 | New consent grant | `AuditLogs` | `OperationName == "Consent to application"` |
-| High-privilege permissions | `AuditLogs` | `TargetResources[0].modifiedProperties` |
-| Non-baseline application | `AuditLogs` | Baseline comparison via `set_difference()` |
-
-### 4.5 Conditional Access policy weakening
-
-```
-Modification of Conditional Access policies to remove MFA requirements or exclude privileged roles.
-```
-
-| Signal | Log category | Key fields |
-|---|---|---|
-| CA policy modification | `AuditLogs` | `OperationName has "conditional access"` |
-| MFA requirement removed | `AuditLogs` | `TargetResources` JSON parsing |
-| Privileged role exclusion | `AuditLogs` | Policy JSON diff |
-
-### 4.6 Service principal compromise
-
-```
-Anomalous service principal sign-in from unexpected IP or with unexpected permissions.
-```
-
-| Signal | Log category | Key fields |
-|---|---|---|
-| SP sign-in anomaly | `ServicePrincipalSignInLogs` | `ServicePrincipalId`, `IPAddress` |
-| New credential added to SP | `AuditLogs` | `OperationName == "Add service principal credentials"` |
+| High-privilege permission granted | `AuditLogs` | `TargetResources[0].modifiedProperties` |
+| New credential added to app/SP | `AuditLogs` | `OperationName in ("Add service principal credentials", "Update application – Certificates and secrets management")` |
 | Federated credential added | `AuditLogs` | `OperationName has "federatedIdentityCredential"` |
+
+### 4.5 Directory and policy changes
+
+| Signal | Log category | Key fields |
+|---|---|---|
+| Conditional Access policy modified | `AuditLogs` | `OperationName has "conditional access"`, `TargetResources` |
+| Permanent role assignment | `AuditLogs` | `OperationName == "Add member to role"` |
+| PIM role activation | `AuditLogs` | `OperationName == "Add member to role completed (PIM activation)"` |
+| Service principal sign-in from new IP | `ServicePrincipalSignInLogs` | `ServicePrincipalId`, `IPAddress` |
 
 ---
 
@@ -233,31 +202,36 @@ union isfuzzy=true SigninLogs, AADNonInteractiveUserSignInLogs
 
 ---
 
-## 7. Nested JSON parsing patterns
+## 7. Nested JSON field paths
 
-Many `SigninLogs` and `AuditLogs` columns contain nested JSON. Standard extraction patterns:
+Many sign-in and audit log fields contain nested JSON objects. The **field paths below are consistent across all SIEMs** — only the extraction syntax differs (KQL `parse_json()`, SPL `spath`, Elastic nested field access, etc.).
 
-```kql
-// Location details
-| extend ParsedLocation = parse_json(LocationDetails)
-| extend City = tostring(ParsedLocation.city)
-| extend Country = tostring(ParsedLocation.countryOrRegion)
+### SigninLogs nested fields
 
-// Device details
-| extend ParsedDevice = parse_json(DeviceDetail)
-| extend Browser = tostring(ParsedDevice.browser)
-| extend OS = tostring(ParsedDevice.operatingSystem)
-| extend IsCompliant = tobool(ParsedDevice.isCompliant)
+| Top-level field | Nested path | Type | Use |
+|----------------|-------------|------|-----|
+| `LocationDetails` | `.city` | string | Geo-anomaly detection |
+| `LocationDetails` | `.countryOrRegion` | string | Impossible travel |
+| `LocationDetails` | `.state` | string | Regional baselining |
+| `DeviceDetail` | `.browser` | string | User agent anomaly |
+| `DeviceDetail` | `.operatingSystem` | string | Platform baselining |
+| `DeviceDetail` | `.isCompliant` | bool | Device compliance check |
+| `DeviceDetail` | `.deviceId` | string | Device identity correlation |
+| `ConditionalAccessPolicies` | `[].displayName` | string (array) | Which CA policies evaluated |
+| `ConditionalAccessPolicies` | `[].result` | string (array) | `"success"`, `"failure"`, `"notApplied"` |
+| `AuthenticationDetails` | `[].authenticationMethod` | string (array) | MFA method used |
+| `AuthenticationDetails` | `[].succeeded` | bool (array) | Per-step auth result |
+| `AuthenticationProcessingDetails` | `[].key` | string (array) | Contains `"Is Primary Refresh Token"` for PRT usage |
 
-// Conditional Access policies
-| mv-expand CAPolicy = parse_json(ConditionalAccessPolicies)
-| extend PolicyName = tostring(CAPolicy.displayName)
-| extend PolicyResult = tostring(CAPolicy.result)
+### AuditLogs nested fields
 
-// AuditLogs target resources
-| extend TargetUPN = tostring(TargetResources[0].userPrincipalName)
-| extend ModifiedProps = parse_json(tostring(TargetResources[0].modifiedProperties))
-```
+| Top-level field | Nested path | Type | Use |
+|----------------|-------------|------|-----|
+| `InitiatedBy` | `.user.userPrincipalName` | string | Who performed the action |
+| `InitiatedBy` | `.app.displayName` | string | App-initiated changes |
+| `TargetResources` | `[0].displayName` | string | Target object name |
+| `TargetResources` | `[0].userPrincipalName` | string | Target user |
+| `TargetResources` | `[0].modifiedProperties` | array | What changed (old/new values) |
 
 ---
 
@@ -276,26 +250,16 @@ Many `SigninLogs` and `AuditLogs` columns contain nested JSON. Standard extracti
 | Conditional Access Administrator | High | Can weaken or disable CA policies |
 | Partner Tier2 Support | Critical | Delegated admin — supply-chain attack vector |
 
-### PIM activation detection
+### Key AuditLogs operations for role monitoring
 
-```kql
-AuditLogs
-| where OperationName == "Add member to role completed (PIM activation)"
-| extend ActivatedRole = tostring(TargetResources[0].displayName)
-| extend ActivatedBy = tostring(InitiatedBy.user.userPrincipalName)
-| where ActivatedRole in ("Global Administrator", "Privileged Role Administrator")
-```
+| Operation | `OperationName` value | What it means |
+|-----------|----------------------|---------------|
+| PIM activation | `"Add member to role completed (PIM activation)"` | Just-in-time role elevation |
+| Permanent assignment | `"Add member to role"` | Bypasses PIM — persistence risk |
+| Role removal | `"Remove member from role"` | Privilege revocation or cleanup |
+| Eligible assignment | `"Add eligible member to role in PIM"` | PIM-eligible (not yet active) |
 
-### Permanent role assignment (bypassing PIM)
-
-```kql
-AuditLogs
-| where OperationName == "Add member to role"
-| where Result == "success"
-| extend RoleName = tostring(TargetResources[0].displayName)
-| extend AssignedUser = tostring(TargetResources[0].userPrincipalName)
-| extend AssignedBy = tostring(InitiatedBy.user.userPrincipalName)
-```
+For example queries, see [references/Detection-Cheatsheet.md](references/Detection-Cheatsheet.md).
 
 ---
 
@@ -324,12 +288,12 @@ Microsoft first-party apps share refresh tokens via FOCI. If an attacker steals 
 
 ### Token theft detection signals
 
-| Signal | Where to look |
-|--------|--------------|
-| Access token replay from new IP | `SigninLogs` — same `CorrelationId`, different `IPAddress` |
-| Refresh token used from anomalous device | `AADNonInteractiveUserSignInLogs` — `DeviceDetail` mismatch |
-| PRT theft (pass-the-PRT) | `SigninLogs` — `AuthenticationProcessingDetails` contains `"Is Primary Refresh Token"` |
-| Impossible travel on token refresh | `AADNonInteractiveUserSignInLogs` — geo-distance between consecutive sign-ins |
+| Signal | Log category | Key fields |
+|--------|-------------|------------|
+| Access token replay from new IP | `SigninLogs` | Same `CorrelationId`, different `IPAddress` |
+| Refresh token from anomalous device | `NonInteractiveUserSignInLogs` | `DeviceDetail` mismatch |
+| PRT usage (pass-the-PRT) | `SigninLogs` | `AuthenticationProcessingDetails` contains `"Is Primary Refresh Token"` |
+| Impossible travel on token refresh | `NonInteractiveUserSignInLogs` | Geo-distance between consecutive sign-ins |
 
 ---
 
@@ -354,16 +318,15 @@ Microsoft first-party apps share refresh tokens via FOCI. If an attacker steals 
 | `AppRoleAssignment.ReadWrite.All` | Application | Grant any app permission — self-escalation |
 | `User.ReadWrite.All` | Application | Modify any user — password reset, MFA bypass |
 
-### Consent grant detection
+### Key AuditLogs operations for consent monitoring
 
-```kql
-AuditLogs
-| where OperationName == "Consent to application"
-| extend ConsentedBy = tostring(InitiatedBy.user.userPrincipalName)
-| extend AppName = tostring(TargetResources[0].displayName)
-| extend Permissions = tostring(TargetResources[0].modifiedProperties)
-| where ConsentedBy !in (known_admin_list)
-```
+| Operation | `OperationName` value | What it means |
+|-----------|----------------------|---------------|
+| User/admin consent | `"Consent to application"` | Permission grant — check `TargetResources[0].modifiedProperties` for scope |
+| App role assignment | `"Add app role assignment to service principal"` | Application permission granted |
+| OAuth2 permission grant | `"Add OAuth2PermissionGrant"` | Delegated permission granted |
+
+For example queries, see [references/Detection-Cheatsheet.md](references/Detection-Cheatsheet.md).
 
 ---
 
@@ -381,76 +344,9 @@ Cross-platform correlation happens at the SIEM/SOAR layer. The `UserPrincipalNam
 
 ---
 
-## 12. Detection cheatsheet — quick-reference queries
+## 12. Detection cheatsheet
 
-> The examples below use KQL (Sentinel). The **logic and field names are portable** — adapt the syntax to your SIEM (SPL for Splunk, EQL/ES|QL for Elastic, CQL for CrowdStrike NG-SIEM, etc.).
-
-### Password spray (high-volume failed auth from single IP)
-
-```kql
-SigninLogs
-| where TimeGenerated > ago(1h)
-| where ResultType in ("50126", "50053", "50064")
-| summarize FailCount = count(), DistinctUsers = dcount(UserPrincipalName) by IPAddress
-| where DistinctUsers > 10 and FailCount > 50
-```
-
-### MFA fatigue (repeated denials then success)
-
-```kql
-let MFADenials = SigninLogs
-    | where ResultType == "500121"
-    | summarize DenialCount = count(), FirstDenial = min(TimeGenerated), LastDenial = max(TimeGenerated) by UserPrincipalName
-    | where DenialCount >= 5;
-let Successes = SigninLogs
-    | where ResultType == "0";
-MFADenials
-| join kind=inner Successes on UserPrincipalName
-| where TimeGenerated between (LastDenial .. (LastDenial + 30m))
-```
-
-### New inbox rule after risky sign-in (AiTM chain)
-
-```kql
-let RiskySignIns = SigninLogs
-    | where column_ifexists("RiskLevelDuringSignIn", "none") in ("medium", "high")
-    | where ResultType == "0"
-    | project RiskyTime = TimeGenerated, UserPrincipalName, IPAddress;
-OfficeActivity
-| where Operation in ("New-InboxRule", "Set-InboxRule")
-| join kind=inner RiskySignIns on $left.UserId == $right.UserPrincipalName
-| where TimeGenerated between (RiskyTime .. (RiskyTime + 1h))
-```
-
-### Suspicious OAuth consent grant
-
-```kql
-AuditLogs
-| where OperationName == "Consent to application"
-| extend AppName = tostring(TargetResources[0].displayName)
-| extend ConsentedBy = tostring(InitiatedBy.user.userPrincipalName)
-| extend Perms = tostring(TargetResources[0].modifiedProperties)
-| where Perms has_any ("Mail.ReadWrite", "Files.ReadWrite.All", "Directory.ReadWrite.All")
-```
-
-### Service principal credential addition (persistence)
-
-```kql
-AuditLogs
-| where OperationName in ("Add service principal credentials", "Update application – Certificates and secrets management")
-| extend Actor = tostring(InitiatedBy.user.userPrincipalName)
-| extend TargetApp = tostring(TargetResources[0].displayName)
-```
-
-### Cross-tenant anomaly (novel B2B access)
-
-```kql
-SigninLogs
-| where HomeTenantId != ResourceTenantId
-| where ResultType == "0"
-| summarize FirstSeen = min(TimeGenerated), Count = count() by UserPrincipalName, HomeTenantId, AppDisplayName
-| where FirstSeen > ago(7d)
-```
+For example KQL queries covering password spray, MFA fatigue, AiTM chains, OAuth consent, SP credential addition, cross-tenant anomalies, and PIM activations, see [references/Detection-Cheatsheet.md](references/Detection-Cheatsheet.md). The logic and field names are portable — adapt the syntax to your SIEM.
 
 ---
 

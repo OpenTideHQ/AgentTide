@@ -1,6 +1,6 @@
 ---
 name: microsoft-azure
-description: Azure cloud infrastructure security telemetry for detection engineering — Azure Activity Log and Resource Manager operations, Azure RBAC model (roles, scopes, PIM), managed identity mechanics, Key Vault access patterns, storage account security, virtual machine and compute operations, network security groups, Azure Policy and Defender for Cloud signals, and the mapping between Azure operations and Sentinel/Defender telemetry. Use when authoring detections targeting Azure resource abuse, privilege escalation, data exfiltration, or persistence at the infrastructure layer. For Entra ID identity detections, use `entra-id` instead.
+description: Azure cloud infrastructure security telemetry for detection engineering — Azure Activity Log and Resource Manager operations, Azure RBAC model (roles, scopes, PIM), managed identity mechanics, Key Vault access patterns, storage account security, virtual machine and compute operations, network security groups, Azure Policy and Defender for Cloud signals. Use when authoring detections targeting Azure resource abuse, privilege escalation, data exfiltration, or persistence at the infrastructure layer. For Entra ID identity detections, use `entra-id` instead.
 ---
 
 # Microsoft Azure — detection-relevant internals
@@ -13,16 +13,18 @@ This skill covers Azure cloud infrastructure security. For Entra ID (identity/au
 
 Every Azure Resource Manager (ARM) operation generates an Activity Log entry. Key fields:
 
-| Field | Sentinel column (`AzureActivity`) | Detection use |
+| Field | Type | Detection use |
 |---|---|---|
-| `operationName` | `OperationNameValue` | ARM operation (e.g. `Microsoft.Compute/virtualMachines/write`) |
-| `caller` | `Caller` | UPN or service principal ID |
-| `callerIpAddress` | `CallerIpAddress` | Source IP |
-| `status` | `ActivityStatusValue` | `Started`, `Succeeded`, `Failed` |
-| `category` | `CategoryValue` | `Administrative`, `Security`, `ServiceHealth`, `Policy` |
-| `resourceId` | `ResourceId` | Full ARM resource path |
-| `level` | `Level` | `Informational`, `Warning`, `Error`, `Critical` |
-| `claims` | `Claims_d` | JWT claims including `appid`, `oid`, `tid` |
+| `operationName` | string | ARM operation (e.g. `Microsoft.Compute/virtualMachines/write`) |
+| `caller` | string | UPN (user) or GUID (service principal) |
+| `callerIpAddress` | string | Source IP |
+| `status` | string | `Started`, `Succeeded`, `Failed` |
+| `category` | string | `Administrative`, `Security`, `ServiceHealth`, `Policy` |
+| `resourceId` | string | Full ARM resource path |
+| `level` | string | `Informational`, `Warning`, `Error`, `Critical` |
+| `claims` | object | JWT claims including `appid` (application ID), `oid` (object ID), `tid` (tenant ID) |
+
+> Column names in your SIEM may differ from the Activity Log JSON field names. Consult your SIEM's Azure connector documentation for exact column mappings.
 
 ### Operation name patterns
 
@@ -94,7 +96,7 @@ Managed identities acquire tokens via the Instance Metadata Service (IMDS) at `1
 | `CertificateGet` | Certificate accessed — potential for certificate-based auth abuse |
 | `VaultAccessPolicyChange` | Access policy modified — privilege escalation |
 
-Key Vault diagnostic logs go to `AzureDiagnostics` with `ResourceType` = `VAULTS`. Enable diagnostic settings to capture data plane operations.
+Key Vault data-plane operations require diagnostic settings to be enabled. Logs are exported via diagnostic settings to your SIEM (Event Hub, storage account, or Log Analytics). Without diagnostic settings, Key Vault data-plane activity is invisible.
 
 ---
 
@@ -145,12 +147,14 @@ Key Vault diagnostic logs go to `AzureDiagnostics` with `ResourceType` = `VAULTS
 
 ## 8. Defender for Cloud signals
 
-| Signal | Source | Detection use |
+| Signal | Description | Detection use |
 |---|---|---|
-| Security alerts | `SecurityAlert` table | Defender-generated threat detections |
-| Recommendations | `SecurityRecommendation` | Misconfiguration indicators |
-| Secure Score changes | `SecureScoreControls` | Security posture degradation |
-| Regulatory compliance | `SecurityRegulatoryCompliance` | Compliance drift |
+| Security alerts | Defender-generated threat detections | Active threat indicators |
+| Recommendations | Misconfiguration and posture findings | Proactive risk identification |
+| Secure Score changes | Security posture metric changes | Posture degradation tracking |
+| Regulatory compliance | Compliance framework evaluation results | Compliance drift detection |
+
+> Defender for Cloud findings are exported to your SIEM via the built-in connector or Event Hub. Consult your SIEM's Azure integration documentation for exact table names.
 
 ---
 

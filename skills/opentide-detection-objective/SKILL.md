@@ -11,7 +11,7 @@ A DOM bridges the gap between threat modelling (TVM) and deployable detection ru
 
 ## Preconditions
 
-1. Load **`Schemas/Templates`** for DOM (`dom::1.0`) and authoritative JSON schemas.
+1. Load **`Schemas/Templates`** for DOM (e.g. `dom::1.0` — always check the live template for the current version) and authoritative JSON schemas.
 2. Identify related **TVM UUIDs**. Update rather than duplicate when coverage shifts.
 3. Review existing DOMs in the corpus to avoid overlapping coverage.
 
@@ -25,7 +25,7 @@ A DOM bridges the gap between threat modelling (TVM) and deployable detection ru
 |---|---|---|---|
 | `name` | string | Yes | Verb-noun phrase describing the detection goal. Filename = `{name}.yaml`. |
 | `references` | object | Optional | `public` (numbered), `internal` (alpha). Same convention as TVMs. |
-| `metadata` | object | Yes | Same structure as TVM metadata. Schema: `dom::1.0`. |
+| `metadata` | object | Yes | Same structure as TVM metadata. Schema: e.g. `dom::1.0` — verify against live template. |
 | `objective` | object | Yes | Core detection content. |
 
 ### `objective` fields
@@ -192,4 +192,4 @@ The `composition` block models how signals relate to each other:
 - **`mitre-attack-mapping`** for ATT&CK technique precision.
 - **Platform/query skills** validate technical feasibility (`kusto-query-language`, `splunk-spl-processing`, etc.) according to tooling each signal references.
 - **`windows-event-logs`** for Event ID prerequisites and audit policy requirements.
-- **`entra-id-protection`** for identity-layer signal design.
+- **`entra-id`** for identity-layer signal design.

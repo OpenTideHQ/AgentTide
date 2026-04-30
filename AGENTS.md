@@ -17,57 +17,139 @@ When unclear which corpus you are editing — ask **before creating paths**.
 
 ## Prime directives
 
-- **Correctness** — Treat intelligence fidelity and analytic literalness seriously.
-- **Consistency** — Prefer adjusting related artefacts coherently over isolated one-offs.
-- **Transparency** — Decisions surfaced in summaries / commit messages reviewers can consume.
-- **Critical thinking** — Challenge weak analytic leaps—politely.
-- **Autonomy when safe** — Drive tasks end-to-end when scope permits.
+- **Correctness** — Be exact and cognitively correct when breaking down intelligence and complex threat data into modelled OpenTide artefacts. Treat intelligence fidelity and analytic literalness seriously.
+- **Consistency** — Maintain a coherent repository. Sometimes it is better to improve several existing objects before creating a new one. Prefer adjusting related artefacts coherently over isolated one-offs.
+- **Transparency** — All changes, decisions, and proposals must be rationalised, discoverable, and surfaced in summaries or commit messages that reviewers can consume.
+- **Critical thinking** — No vague conclusions. All modelling decisions must be critical. Challenge weak analytic leaps — politely. You are allowed to disagree with the user when reasoning is poor.
+- **Autonomy when safe** — Drive tasks end-to-end when scope permits. As much as possible, aim at performing complete changes autonomously.
 
 ---
 
+## Guardrails
 
-## Framework essentials (compact)
+### Content integrity
+- **NEVER** tamper with schemas or templates unless explicitly instructed.
+- **DO NOT** change configuration files except when explicitly directed.
+- **NEVER** create new folders or restructure the repository without explicit request.
+- **ALWAYS** validate files against JSON schemas before saving.
+- **ALWAYS** use templates as a guide for object structure.
 
-OpenTide models Threat Informed Detection Engineering as interoperable artefacts:
+### Top-down enforcement
+- Given threat intelligence → create threat object(s) (TVM).
+- Given threat objects → create detection objective(s) (DOM).
+- Given objective(s) → create detection rule(s) (MDR).
+- Per run, avoid mixing object types. Always generate the correct object type, and if prompted to mix, ask whether doing it in a separate PR (after the first objects are merged) is preferable. **Mixing object types is not the intended workflow.**
 
-| Type | Typical schema tag | Responsibility |
-|------|---------------------|----------------|
-| **Threat Vector (TVM)** | `tvm::…` | Atomic TTP depiction, chaining, evidenced terrain narratives. |
-| **Detection Objective (DOM)** | `dom::…` | Which signals realise coverage, methodological rigour, data contracts. |
-| **Detection Rule (MDR)** | `mdr::…` | Deployable payloads per connected stack—**`configurations.*` blocks keyed by detector platform**.|
+### Intelligence sourcing
+- **DO** use provided intelligence and repository content as your primary source.
+- **DO NOT** rely on pre-training data for threat intelligence or TTPs.
+- **DO** search and reference existing objects when relevant.
+- **DO NOT** hallucinate or invent threat intelligence.
+- When there is not enough data from the intelligence presented, you may propose alternatives but **STOP** before proceeding — wait for user acceptance.
 
-Always ingest **living templates** bundled with whichever repository syncs schemas—identifiers evolve.
+---
 
-Detection capability surfaces enumerated by CoreTide-aligned deployments routinely include **`sentinel`**, **`defender_for_endpoint`**, **`splunk`**, **`crowdstrike`**, **`carbon_black_cloud`**, **`sentinel_one`**—consult active meta-schema release notes whenever expanding beyond this catalogue.
+## OpenTide framework essentials
+
+OpenTide structures the Detection Engineering lifecycle as as-code (YAML) objects managed in a git repository. There are three core object types:
+
+| Type | Schema tag | Location | Responsibility |
+|------|------------|----------|----------------|
+| **Threat Vector (TVM)** | `tvm::…` | `Objects/Threat Vectors/*.yaml` | Atomically defined TTPs at a low level, directly generated from threat intelligence. Supports bi-directional chaining to represent attack paths. |
+| **Detection Objective (DOM)** | `dom::…` | `Objects/Detection Objectives/*.yaml` | Detection capabilities for identified threats. Supports 1:N and N:1 relations with TVMs. Composed of signals (atomic detection rule ideas) that can be referenced by MDRs. |
+| **Detection Rule (MDR)** | `mdr::…` | `Objects/Detection Rules/*.yaml` | Detection-as-Code files for deployment. Directly linked to DOMs, indirectly to TVMs. **`configurations.*` blocks keyed by detector platform.** |
+
+Always ingest **living templates** bundled with whichever repository syncs schemas — identifiers evolve.
+
+Detection capability surfaces enumerated by CoreTide-aligned deployments routinely include **`sentinel`**, **`defender_for_endpoint`**, **`splunk`**, **`crowdstrike`**, **`carbon_black_cloud`**, **`sentinel_one`** — consult active meta-schema release notes whenever expanding beyond this catalogue.
 
 ---
 
 ## Default workflow
 
-1. **TVM intake & modelling**
-2. **DOM signalisation**
-3. **MDR platform binding(s)**
+1. **TVM intake & modelling** — analyse intelligence, identify distinct TTPs, map relationships
+2. **DOM signalisation** — define which signals realise coverage, establish data contracts
+3. **MDR platform binding(s)** — deploy detection payloads per connected stack
 
-Avoid mixing heterogeneous object edits in one merge unless explicitly orchestrated—the review surface stays sharper per object type otherwise.
+Avoid mixing heterogeneous object edits in one merge unless explicitly orchestrated — the review surface stays sharper per object type otherwise.
+
+### When creating objects from intelligence
+
+1. **Analyse the intelligence** — review thoroughly, identify distinct TTPs and detection opportunities, map relationships. Avoid inferring from intuition knowledge not present in the source. **STOP** and ask for precision if unsure which object types to create.
+2. **Plan the object hierarchy** — determine which TVMs need creating (and chaining opportunities), identify corresponding DOMs, plan MDRs if applicable.
+3. **Check for existing content** — search the repository for related objects. Determine if updates to existing files are more appropriate than creating new ones. If updating, preserve coherency, existing UUIDs, and relations.
+4. **Consult templates and schemas** — load the appropriate template from `Schemas/Templates/*.yaml`, reference the relevant JSON Schema for field requirements, understand required vs. optional fields.
+5. **Generate UUIDs** — use system tools (`uuidgen` on Unix/macOS, `[guid]::NewGuid()` on PowerShell). **NEVER reuse UUIDs from existing objects.** If unable to generate, clearly instruct the user to add them manually.
+6. **Create objects** — start with TVMs (foundational), then DOMs (link to TVMs), finally MDRs (link to DOMs). Place files in the correct folders per project structure.
+7. **Validate** — check for schema validation errors, verify all required fields are populated, confirm UUIDs are unique, review relationships between objects.
 
 ---
 
 ## Query & platform skill routing
 
-Microsoft stacks share **KQL** idioms (**`kusto-query-language`**), diverging operationally (**`microsoft-sentinel`** vs **`microsoft-defender-endpoint`**). Splunk adopts **SPL** (**`splunk-spl-processing`**). Endpoint / XDR SaaS integrations each carry authored guardrails (**`crowdstrike-falcon`**, **`sentinelone-singularity`**, **`carbon-black-cloud`**, **`harfanglab`**). Operational maturity spanning hunts→alerts leverages **`detection-engineering`** regardless of vendor.
+Microsoft stacks share **KQL** idioms (**`kusto-query-language`**), diverging operationally (**`microsoft-sentinel`** vs **`microsoft-defender-endpoint`**). Splunk adopts **SPL** (**`splunk-spl-processing`**). Endpoint / XDR SaaS integrations each carry authored guardrails (**`crowdstrike-falcon`**, **`sentinelone-singularity`**, **`carbon-black-cloud`**, **`harfanglab`**). Operational maturity spanning hunts → alerts leverages **`detection-engineering`** regardless of vendor.
 
-Never invent vendor syntax—defer to sanctioned references or mirrored samples.
+Never invent vendor syntax — defer to sanctioned references or mirrored samples.
 
 ---
 
-## Content repository guardrails (reiterate)
+## Critical constraints
+
+### Schema compliance
+- ✅ Always validate against JSON schemas.
+- ✅ Use templates to understand structure before consulting full schemas.
+- ✅ Search schemas for specific field requirements (schemas may be too large to load entirely).
+- ❌ Never generate objects without understanding the schema requirements.
+
+### UUID management
+- ✅ Generate unique UUIDs using system tools.
+- ✅ Clearly indicate when users must add UUIDs manually.
+- ❌ Never reuse existing UUIDs.
+- ❌ Never fabricate or hardcode UUIDs.
+
+### File management
+- ✅ Respect the existing folder structure.
+- ✅ Place files in the correct `Objects/` subdirectory.
+- ❌ Do not create new folders without explicit user request.
+- ❌ Do not modify configuration or schema files without user approval.
+
+### Authoring
+- ✅ Use British English by default consistently.
+- ✅ Focus on one object type per run unless the user explicitly requests a more complex operation.
+- ❌ Do not create extremely long `terrain` sections in TVMs — keep them coherent, well documented, and relatively concise.
+- ❌ Do not overassume when generating detection rule queries. If confidence is low, generate the object without the query and propose pseudocode as a comment, mentioning your reasoning to the user.
+
+---
+
+## Content repository guardrails
 
 Unless explicitly commissioned:
 
 - **Do not hand-edit schema templates/meta-registries blindly.**
 - **Do not restructure authoritative folder layouts.**
-- **Generate fresh UUID** values for genuinely new artefacts—reuse only when logically identical lineage persists.
+- **Generate fresh UUID** values for genuinely new artefacts — reuse only when logically identical lineage persists.
 - Prefer **British English** unless policy overrides downstream.
+
+---
+
+## Communication protocol
+
+### When starting a task
+1. Acknowledge the task.
+2. Outline your understanding and approach.
+3. Ask clarifying questions if needed.
+4. Create a plan and to-dos.
+
+### During task execution
+1. Explain what you are doing at each major step.
+2. Highlight any decisions or assumptions made.
+
+### When completing a task
+1. Summarise what was created or modified.
+2. Explain the relationships between objects.
+3. Provide any necessary next steps or manual actions required.
+4. Confirm all files are in the correct locations.
+5. If you focused on one object type and already identified opportunities for additional object type creation, propose a follow-up operation explicitly.
 
 ---
 

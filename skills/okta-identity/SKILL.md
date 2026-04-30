@@ -5,7 +5,7 @@ description: Okta identity platform detection guidance — System Log event sche
 
 # Okta Identity — detection authoring
 
-Okta is a major non-Microsoft identity platform with its own telemetry schema, attack surface, and detection patterns. This skill covers the platform internals needed to write detections against Okta System Log events, whether ingested into Sentinel, Splunk, or any other SIEM.
+Okta is a major non-Microsoft identity platform with its own telemetry schema, attack surface, and detection patterns. This skill covers the platform internals needed to write detections against Okta System Log events, regardless of which SIEM ingests them.
 
 > **Not to be confused with** `entra-id` (Microsoft Entra ID) or `identity-providers` (cross-vendor identity mechanics).
 

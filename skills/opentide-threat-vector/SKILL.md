@@ -48,7 +48,7 @@ Guardrails: no fabrication of sightings, IOCs, or attribution beyond the evidenc
 
 ### Preconditions
 
-1. Load live **`Schemas/Templates`** for TVM and the tenant's tvm schema revision (current: `tvm::2.1`).
+1. Load live **`Schemas/Templates`** for TVM and the tenant's tvm schema revision (e.g. `tvm::2.1` — always check the live template for the current version).
 2. Confirm **`Objects/Threat Vectors/`** conventions in the corpus you edit.
 
 ### Complete field reference
@@ -68,7 +68,7 @@ Guardrails: no fabrication of sightings, IOCs, or attribution beyond the evidenc
 | Field | Required | Notes |
 |---|---|---|
 | `uuid` | Yes | Fresh UUIDv4 for every new TVM. Never reuse. |
-| `schema` | Yes | Use `tvm::2.1` (current). |
+| `schema` | Yes | e.g. `tvm::2.1` — always verify against the live template. |
 | `version` | Yes | Start at `1`, increment on each revision. |
 | `created` / `modified` | Yes | `YYYY-MM-DD` format. |
 | `tlp` | Yes | Lowercase: `clear`, `green`, `amber`, `amber+strict`, `red`. |
@@ -218,7 +218,7 @@ actors:
 | **Missing chaining for obvious sequences** | Discovery TVMs should chain to privilege escalation; initial access to execution |
 | **Vague one-line terrain** | Specify privilege, access scope, configuration, trust relationships |
 | **Spelling/grammar errors** | Proofread — errors erode trust in the analytical product |
-| **Stale schema version** | Use `tvm::2.1` with `organisation` block |
+| **Stale schema version** | Always check the live template for the current schema version |
 
 ---
 
@@ -226,7 +226,7 @@ actors:
 
 - [ ] `name` is sentence-case, action-oriented, describes the adversary behaviour.
 - [ ] `criticality` is calibrated against severity + impact + sophistication.
-- [ ] `metadata.schema` is `tvm::2.1` with `organisation` block populated.
+- [ ] `metadata.schema` matches the current live template version, with `organisation` block populated.
 - [ ] `metadata.uuid` is a fresh UUIDv4 (not reused from another TVM).
 - [ ] `terrain` states preconditions (privilege, access, config, trust) — not a description restatement.
 - [ ] `description` uses `|` block scalar with `##` headings for structure.

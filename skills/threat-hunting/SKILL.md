@@ -54,7 +54,7 @@ For each claim, formulate an ABLE-complete hypothesis:
 | **A**ctor | Who? | Named from intelligence |
 | **B**ehaviour | What TTP, specifically? | Map to MITRE ATT&CK |
 | **L**ocation | Where in the environment? | Target profile + organisational knowledge |
-| **E**vidence | What telemetry detects it? | Platform table catalogues (`microsoft-defender-endpoint/MDE-Tables`, `microsoft-sentinel/Sentinel-Tables`, vendor-specific) |
+| **E**vidence | What telemetry detects it? | Platform table/index catalogues (see relevant platform skill) |
 
 **Completeness check**:
 

@@ -18,11 +18,10 @@ Where **[CoreTide](https://github.com/OpenTideHQ/CoreTide)** is the engine and *
 [Agent Skills](https://agentskills.io) are an open standard for giving AI coding agents specialised knowledge. A skill is simply a folder containing a `SKILL.md` file with YAML frontmatter (`name`, `description`) and Markdown instructions, plus optional `references/`, `scripts/`, and `assets/` subdirectories.
 
 ```
-kusto-query-language/
+opentide-threat-vector/
 ├── SKILL.md                        # Core instructions (loaded when activated)
 └── references/
-    ├── Best-Practices.md           # Loaded on demand
-    └── Hypothesis-Anti-Patterns.md
+    └── Chaining-Patterns.md        # Loaded on demand
 ```
 
 **How they work:**
@@ -32,6 +31,36 @@ kusto-query-language/
 3. **Execution** — the agent follows the instructions, loading reference files or running scripts only when needed.
 
 This means you can have dozens of skills available without bloating the agent's context window — it only loads what it needs, when it needs it.
+
+```mermaid
+flowchart LR
+    subgraph Discovery["1 · Discovery"]
+        A["Agent starts"] --> B["Scan .agents/skills/"]
+        B --> C["Read name + description\nfrom each SKILL.md\n~100 tokens per skill"]
+    end
+
+    subgraph Activation["2 · Activation"]
+        D["User prompt\nor task context"] --> E{"Match skill\ndescription?"}
+        E -- Yes --> F["Load full SKILL.md\ninto context"]
+        E -- No --> G["Skip — zero cost"]
+    end
+
+    subgraph Execution["3 · Execution"]
+        F --> H["Follow instructions"]
+        H --> I{"Need references\nor scripts?"}
+        I -- Yes --> J["Load references/\nor run scripts/"]
+        I -- No --> K["Generate output"]
+        J --> K
+    end
+
+    C --> D
+    K --> L["Detection content\nTVM · DOM · MDR"]
+
+    style Discovery fill:#1a1a2e,stroke:#4a4a8a,color:#eee
+    style Activation fill:#16213e,stroke:#4a4a8a,color:#eee
+    style Execution fill:#0f3460,stroke:#4a4a8a,color:#eee
+    style L fill:#e94560,stroke:#e94560,color:#fff
+```
 
 > **Why not just paste documentation into the prompt?** Skills are version-controlled, shareable across teams, and work identically across every compatible agent product. Write once, use everywhere.
 

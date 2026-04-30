@@ -1,11 +1,11 @@
 ---
 name: windows-event-logs
-description: Windows native event log authoring guidance for detection engineering — Security, Sysmon, PowerShell, and system event channels. Covers critical Event IDs (4624/4625/4688/4697/4720/5140/7045), Sysmon EID 1-29 with configuration discipline, PowerShell ScriptBlock/Module logging, EVTX channel routing, audit policy prerequisites, XML event data extraction, and the mapping between Windows events and Sentinel SecurityEvent / Defender DeviceEvents tables. Use when authoring detections that depend on native Windows telemetry, configuring audit policies for detection coverage, or bridging Windows events to platform-specific query skills.
+description: Windows native event log authoring guidance for detection engineering — Security, Sysmon, PowerShell, and system event channels. Covers critical Event IDs (4624/4625/4688/4697/4720/5140/7045), Sysmon EID 1-29 with configuration discipline, PowerShell ScriptBlock/Module logging, EVTX channel routing, audit policy prerequisites, ETW fundamentals, and SIEM ingestion patterns. Use when authoring detections that depend on native Windows telemetry, configuring audit policies for detection coverage, or bridging Windows events to platform-specific query skills.
 ---
 
 # Windows Event Logs — detection authoring
 
-This skill encodes the Windows-native event log knowledge required for detection content that depends on Security, Sysmon, PowerShell, or System event channels. It bridges the gap between raw Windows telemetry and the platform-specific query skills (`microsoft-sentinel`, `microsoft-defender-endpoint`).
+This skill encodes the Windows-native event log knowledge required for detection content that depends on Security, Sysmon, PowerShell, or System event channels. It bridges the gap between raw Windows telemetry and the platform-specific query skills used by your SIEM or EDR.
 
 ---
 
@@ -188,71 +188,133 @@ Detection content must declare which audit policies are required. Without the co
 
 ---
 
-## 6. Platform table mapping
+## 6. SIEM ingestion patterns
 
-| Windows source | Sentinel table | Defender table | Notes |
+> Table/index names are SIEM-specific. Consult your SIEM's Windows event integration documentation for exact table names and field mappings.
+
+| Windows source | Telemetry type | Ingestion method | Notes |
 |---|---|---|---|
-| Security log | `SecurityEvent` | `DeviceLogonEvents`, `DeviceProcessEvents` | Defender normalises into typed tables |
-| Sysmon | `Event` (Sysmon channel) or `SysmonEvent` | `DeviceProcessEvents`, `DeviceFileEvents`, `DeviceNetworkEvents` | Defender sensor provides equivalent telemetry natively |
-| PowerShell 4104 | `Event` (PowerShell channel) | `DeviceEvents` (ActionType: PowerShellCommand) | |
-| System 7045 | `Event` (System channel) | `DeviceEvents` (ActionType: ServiceInstalled) | |
+| Security log | Authentication, process, account management events | Windows Event Forwarding (WEF), SIEM agent, or EDR sensor | Primary detection source |
+| Sysmon | Process, file, network, registry, DNS, pipe events | WEF or SIEM agent (Sysmon channel) | Requires Sysmon deployment + config |
+| PowerShell Operational | ScriptBlock (4104), Module (4103) logging | WEF or SIEM agent | Requires GPO enablement |
+| System | Service installation (7045), driver loads | WEF or SIEM agent | Always available |
+| Windows Defender Operational | AV detections, exclusion changes, tamper events | WEF or SIEM agent | Always available on Windows 10+ |
+| Task Scheduler Operational | Scheduled task lifecycle | WEF or SIEM agent | Always available |
 
-**Key insight**: Microsoft Defender for Endpoint provides **native sensor telemetry** that overlaps with Sysmon. In Defender-managed environments, Sysmon is often redundant for process/file/network events. However, Sysmon provides unique value for:
-- Named pipe events (EID 17/18) — no native Defender equivalent
-- WMI subscription events (EID 19/20/21) — partial Defender coverage
-- Clipboard monitoring (EID 24) — no Defender equivalent
-- DNS query logging (EID 22) — Defender has `DeviceNetworkEvents` but different granularity
+### EDR sensor overlap with Sysmon
+
+Modern EDR sensors (Defender, CrowdStrike, SentinelOne, Carbon Black, etc.) provide **native sensor telemetry** that overlaps significantly with Sysmon for process, file, and network events. In EDR-managed environments, Sysmon may be partially redundant. However, Sysmon provides unique value for:
+- **Named pipe events** (EID 17/18) — limited or no EDR equivalent
+- **WMI subscription events** (EID 19/20/21) — partial EDR coverage
+- **Clipboard monitoring** (EID 24) — no EDR equivalent
+- **DNS query logging** (EID 22) — EDR coverage varies in granularity
+- **File creation time changes** (EID 2) — timestomping detection
 
 ---
 
-## 7. XML event data extraction (Sentinel)
+## 7. Event data structure
 
-Security events in Sentinel's `SecurityEvent` table store structured data in the `EventData` column as XML. Common extraction patterns:
+Windows events store structured data in XML format within the `EventData` or `UserData` element. Key extraction considerations:
 
-```kql
-// Extract command line from 4688
-SecurityEvent
-| where EventID == 4688
-| extend CommandLine = tostring(parse_xml(EventData).DataItem.EventData.Data[8]["#text"])
+### Common EventData fields by EID
 
-// Better: use the pre-parsed columns when available
-SecurityEvent
-| where EventID == 4688
-| where CommandLine has "powershell"  // Pre-parsed in newer SecurityEvent schema
+| EID | Key fields | Notes |
+|---|---|---|
+| 4624 | `TargetUserName`, `TargetDomainName`, `LogonType`, `IpAddress`, `IpPort`, `WorkstationName` | Logon Type is critical for filtering |
+| 4625 | `TargetUserName`, `LogonType`, `FailureReason`, `Status`, `SubStatus`, `IpAddress` | Status/SubStatus codes identify failure reason |
+| 4688 | `NewProcessName`, `CommandLine`, `ParentProcessName`, `TokenElevationType` | CommandLine requires GPO enablement |
+| 4720 | `TargetUserName`, `TargetDomainName`, `SubjectUserName` | Who created which account |
+| 7045 | `ServiceName`, `ImagePath`, `ServiceType`, `StartType`, `AccountName` | Service binary path is key detection field |
+| 4104 | `ScriptBlockText`, `ScriptBlockId`, `Path` | Deobfuscated script content |
+
+### Extraction guidance
+
+- **Prefer pre-parsed fields** when your SIEM provides them — XML parsing is expensive at query time.
+- **Fall back to XML extraction** only when the SIEM does not pre-parse the needed field.
+- **Field positions in XML are not guaranteed** across Windows versions — extract by field name, not array index.
+- Consult your SIEM's documentation for which EventData fields are pre-parsed into dedicated columns.
+
+---
+
+## 8. ETW (Event Tracing for Windows) fundamentals
+
+ETW is the underlying mechanism that generates all Windows events. Understanding ETW is relevant for advanced detection and evasion awareness.
+
+### How events flow
+
+```
+Application / kernel → ETW Provider → ETW Session → Event Log channel → EVTX file → SIEM
 ```
 
-**Note**: Sentinel's `SecurityEvent` table pre-parses many common fields (`TargetUserName`, `IpAddress`, `CommandLine`, etc.). Check the table schema before resorting to XML parsing — it's expensive.
+### Detection-relevant ETW concepts
+
+| Concept | Relevance |
+|---|---|
+| **ETW providers** | Each event source registers as a provider (e.g., `Microsoft-Windows-Security-Auditing`). Attackers may attempt to disable or patch providers. |
+| **ETW patching** | Attackers can patch `ntdll!EtwEventWrite` in-process to blind ETW-based telemetry (including AMSI). Detection: monitor for `ntdll.dll` memory modifications. |
+| **ETW session limits** | Windows has a maximum of 64 concurrent ETW sessions. Exhausting sessions can blind security tools. |
+| **Provider GUIDs** | Each provider has a GUID. Sysmon's provider GUID is well-known — attackers may specifically target it. |
+| **Kernel-mode ETW** | Some events (e.g., process creation, image loads) originate from kernel-mode providers and are harder to tamper with from user-mode. |
+
+### Defence impairment via ETW
+
+| Attack | Detection signal |
+|---|---|
+| ETW provider patching | Sysmon EID 10 (ProcessAccess to `ntdll.dll`), or EDR-specific tamper alerts |
+| Audit log cleared | Security EID 1102 |
+| Audit policy changed | Security EID 4719 |
+| Sysmon service stopped | System EID 7036 (Sysmon service state change) |
+| Event log service stopped | System EID 7036 (EventLog service state change) |
 
 ---
 
-## 8. Detection anti-patterns
+## 9. Windows Defender Operational events
+
+| EID | Description | Detection use |
+|---|---|---|
+| **1116** | Malware detected | AV detection — correlate with process context |
+| **1117** | Action taken on malware | AV remediation action |
+| **5001** | Real-time protection disabled | Defence impairment |
+| **5007** | Configuration changed | Exclusion added, settings weakened |
+| **5010** | Scanning disabled | Defence impairment |
+| **1121** | ASR rule triggered (block mode) | Attack Surface Reduction detection |
+| **1122** | ASR rule triggered (audit mode) | ASR detection in audit mode |
+
+**Key detection**: EID 5007 with exclusion path additions is a common attacker technique to blind Defender before deploying payloads. Monitor for exclusion changes targeting sensitive paths (`C:\Windows\Temp`, `C:\Users\*\AppData`, etc.).
+
+---
+
+## 10. Detection anti-patterns
 
 | Anti-pattern | Description | Fix |
 |---|---|---|
 | **Assuming command-line logging is enabled** | Writing 4688 detections without noting the GPO prerequisite | Document the prerequisite; provide a validation query |
 | **Sysmon without config declaration** | Referencing Sysmon EIDs without specifying which config rules must be active | Declare required Sysmon config rules |
 | **Logon Type confusion** | Alerting on all 4624 events without filtering by Logon Type | Filter to relevant types (3, 10 for lateral movement) |
-| **Machine account noise** | Not excluding `$`-suffixed accounts from authentication detections | Add `where TargetUserName !endswith "$"` |
+| **Machine account noise** | Not excluding `$`-suffixed accounts from authentication detections | Filter out accounts ending in `$` (machine accounts) |
 | **Service account noise** | Not excluding known service accounts from logon anomaly detections | Maintain exclusion list with audit trail |
-| **EID 4688 without parent process** | Missing the parent process context that Sysmon EID 1 provides natively | Use Sysmon EID 1 or Defender `DeviceProcessEvents` for parent chain |
+| **EID 4688 without parent process** | Missing the parent process context that Sysmon EID 1 provides natively | Use Sysmon EID 1 or EDR process creation telemetry for parent chain |
 
 ---
 
-## 9. Quality checklist
+## 11. Quality checklist
 
 - [ ] Audit policy prerequisites documented for every Event ID used.
 - [ ] Sysmon configuration requirements declared (if Sysmon EIDs referenced).
 - [ ] PowerShell logging GPO requirements declared (if 4103/4104 referenced).
 - [ ] Logon Type filtered appropriately for authentication detections.
 - [ ] Machine accounts (`$`) excluded where appropriate.
-- [ ] Platform table mapping declared (SecurityEvent vs DeviceProcessEvents vs Event).
+- [ ] SIEM ingestion method documented (WEF, agent, EDR sensor).
 - [ ] Command-line logging prerequisite noted for EID 4688 detections.
-- [ ] XML parsing avoided when pre-parsed columns exist.
-- [ ] Sysmon vs Defender native telemetry overlap considered.
+- [ ] Pre-parsed fields preferred over XML extraction at query time.
+- [ ] Sysmon vs EDR native telemetry overlap considered for the target environment.
 - [ ] MITRE ATT&CK data components aligned with the event source.
-
+- [ ] Defence impairment events monitored: EID 1102 (log cleared), 4719 (audit policy changed), Sysmon/EventLog service stops.
+- [ ] Windows Defender exclusion changes (EID 5007) monitored.
+- [ ] ETW tampering awareness documented for advanced evasion scenarios.
+- [ ] EventData field extraction uses field names, not array indices.
 ---
 
-## 10. Reference catalogues
+## 12. Reference catalogues
 
 - `references/Audit-Policy-Matrix.md` — Comprehensive EID-to-audit-policy mapping, Sysmon config requirements, PowerShell GPO paths, and minimum audit policy sets per detection goal.

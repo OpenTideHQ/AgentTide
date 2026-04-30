@@ -58,126 +58,160 @@ A single `AGENTS.md` file at the repository root provides cross-cutting instruct
 
 ## Installation
 
-AgentTide skills work with any tool that supports the [Agent Skills specification](https://agentskills.io/specification). Below are setup instructions for the most common harnesses.
+AgentTide skills work with any tool that supports the [Agent Skills specification](https://agentskills.io/specification). The cross-harness default location is **`.agents/skills/`** in your project root — most compatible agents discover skills there automatically.
 
-### Step 1 — Get the skills into your project
+Pick the method that suits your workflow:
 
-Choose one of the following methods:
+### Option 1 — One-liner with `npx skills add` (easiest)
 
-#### Git submodule (recommended)
-
-```bash
-git submodule add https://github.com/OpenTideHQ/AgentTide.git AgentTide
-```
-
-This keeps AgentTide pinned to a specific commit and updatable with `git submodule update --remote`.
-
-#### Sparse checkout (skills only)
-
-If you only want the `skills/` directory without the rest of the repository:
+The community [`skills`](https://www.npmjs.com/package/skills) CLI can install skills directly from GitHub into `.agents/skills/`:
 
 ```bash
-git clone --filter=blob:none --sparse https://github.com/OpenTideHQ/AgentTide.git
-cd AgentTide
-git sparse-checkout set skills
+npx skills add OpenTideHQ/AgentTide
 ```
 
-#### Manual copy
+This copies the skill directories into your project. No git history, no submodules — just the files. Requires Node.js.
 
-Download or clone the repository and copy the `skills/` directory (and optionally `AGENTS.md`) into your project.
+### Option 2 — Manual download (no tooling required)
+
+Download the repository as a ZIP from GitHub and copy the `skills/` contents into your project:
+
+```bash
+# Download and extract
+curl -sL https://github.com/OpenTideHQ/AgentTide/archive/refs/heads/main.tar.gz | tar xz
+
+# Copy skills into the cross-harness default location
+mkdir -p .agents/skills
+cp -r AgentTide-main/skills/* .agents/skills/
+
+# Optionally copy the AGENTS.md entrypoint
+cp AgentTide-main/AGENTS.md .
+
+# Clean up
+rm -rf AgentTide-main
+```
+
+### Option 3 — Git submodule (stays in sync)
+
+```bash
+git submodule add https://github.com/OpenTideHQ/AgentTide.git .agents/AgentTide
+```
+
+This pins AgentTide to a specific commit. Update with `git submodule update --remote`. Most agents discover skills inside submodule directories automatically.
+
+### Option 4 — Git clone as a sibling (for development)
+
+```bash
+git clone https://github.com/OpenTideHQ/AgentTide.git
+```
+
+Useful when you want to contribute back to AgentTide or keep it as a standalone reference alongside your OpenTide content repository.
 
 ---
 
-### Step 2 — Configure your agent
+### Harness-specific notes
+
+Once the skills are in your project, most agents discover them automatically. Here are harness-specific details for the most popular tools:
 
 <details>
 <summary><strong>VS Code / GitHub Copilot</strong></summary>
 
-VS Code discovers skills automatically from any `skills/` directory in your workspace. If you added AgentTide as a submodule or copied the `skills/` folder, they are available immediately.
+VS Code discovers skills from `.agents/skills/` by default. If you used any of the installation methods above, skills are available immediately in Agent mode.
 
-To also use the `AGENTS.md` as custom instructions, add it to your workspace settings:
+To also use the `AGENTS.md` as custom instructions:
 
 ```jsonc
 // .vscode/settings.json
 {
   "github.copilot.chat.codeGeneration.instructions": [
-    { "file": "AgentTide/AGENTS.md" }
+    { "file": "AGENTS.md" }
   ]
 }
 ```
 
-📖 [VS Code Agent Skills documentation](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
+Verify skills are loaded: open Copilot Chat in Agent mode and type `/skills` to list discovered skills.
+
+📖 [VS Code Agent Skills docs](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
 
 </details>
 
 <details>
 <summary><strong>Cursor</strong></summary>
 
-Cursor discovers skills from `skills/` directories in your project root. If AgentTide is a submodule at `AgentTide/`, Cursor will find `AgentTide/skills/` automatically.
+Cursor discovers skills from `skills/` and `.agents/skills/` directories in your project root.
 
-To also load the `AGENTS.md` as project-level rules, add it to your `.cursor/rules/` directory or reference it in your Cursor settings.
+To also load `AGENTS.md` as project-level rules, copy or symlink it into `.cursor/rules/`:
 
-📖 [Cursor Skills documentation](https://cursor.com/docs/context/skills)
+```bash
+mkdir -p .cursor/rules
+cp AGENTS.md .cursor/rules/
+```
+
+📖 [Cursor Skills docs](https://cursor.com/docs/context/skills)
 
 </details>
 
 <details>
 <summary><strong>Claude Code</strong></summary>
 
-Claude Code reads `AGENTS.md` from the repository root automatically. For skills, it discovers `SKILL.md` files in `skills/` directories.
+Claude Code discovers skills from `.claude/skills/` and `.agents/skills/`. It also reads `AGENTS.md` from the repository root automatically.
 
-If AgentTide is a submodule, symlink or copy the `AGENTS.md` to your project root:
+If you used the submodule approach, add AgentTide as an additional directory so Claude Code discovers its skills:
 
 ```bash
-# Option A: symlink
-ln -s AgentTide/AGENTS.md AGENTS.md
+# Option A: symlink skills into Claude Code's path
+ln -s .agents/AgentTide/skills .claude/skills
 
 # Option B: reference in CLAUDE.md
-echo "Read AgentTide/AGENTS.md for detection engineering instructions." >> CLAUDE.md
+echo "Read .agents/AgentTide/AGENTS.md for detection engineering instructions." >> CLAUDE.md
 ```
 
-📖 [Claude Code Skills documentation](https://code.claude.com/docs/en/skills)
+📖 [Claude Code Skills docs](https://code.claude.com/docs/en/skills)
 
 </details>
 
 <details>
 <summary><strong>OpenAI Codex</strong></summary>
 
-Codex reads `AGENTS.md` from the repository root and discovers skills in `skills/` directories.
+Codex reads `AGENTS.md` from the repository root and discovers skills in `agents/skills/` and `skills/` directories.
 
-If AgentTide is a submodule, symlink the key files:
+If you used the submodule approach, symlink the key paths:
 
 ```bash
-ln -s AgentTide/AGENTS.md AGENTS.md
-ln -s AgentTide/skills skills
+ln -s .agents/AgentTide/AGENTS.md AGENTS.md
+ln -s .agents/AgentTide/skills agents/skills
 ```
 
-📖 [Codex Skills documentation](https://developers.openai.com/codex/skills/)
+📖 [Codex Skills docs](https://developers.openai.com/codex/skills/)
 
 </details>
 
 <details>
 <summary><strong>Gemini CLI</strong></summary>
 
-Gemini CLI discovers skills from `skills/` directories in your project.
+Gemini CLI discovers skills from `.agents/skills/` in your project root — no extra configuration needed if you used Option 1, 2, or 3 above.
 
-```bash
-# If AgentTide is a submodule, symlink the skills directory
-ln -s AgentTide/skills skills
-```
+📖 [Gemini CLI Skills docs](https://geminicli.com/docs/cli/skills/)
 
-📖 [Gemini CLI Skills documentation](https://geminicli.com/docs/cli/skills/)
+</details>
+
+<details>
+<summary><strong>Junie (JetBrains)</strong></summary>
+
+Junie discovers Agent Skills from `.agents/skills/` in your project root automatically.
+
+📖 [Junie Skills docs](https://junie.jetbrains.com/docs/agent-skills.html)
 
 </details>
 
 <details>
 <summary><strong>Other compatible agents</strong></summary>
 
-The Agent Skills format is supported by a growing number of tools including Goose, Junie (JetBrains), Amp, Roo Code, OpenHands, Kiro, and many more. See the [full client showcase](https://agentskills.io/clients) for setup links.
+The Agent Skills format is supported by a growing ecosystem of tools including [Goose](https://block.github.io/goose/), [Amp](https://ampcode.com/), [Roo Code](https://roocode.com/), [OpenHands](https://openhands.dev/), [Kiro](https://kiro.dev/), [OpenCode](https://opencode.ai/), and [many more](https://agentskills.io/clients).
 
 The general pattern is:
 
-1. Place the `skills/` directory where your agent can discover it (usually the project root).
+1. Place skills in `.agents/skills/` (the cross-harness default) or the agent's preferred path.
 2. If the agent reads `AGENTS.md`, place or symlink it at the project root.
 3. Skills are discovered automatically — no further configuration required.
 

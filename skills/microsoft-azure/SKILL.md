@@ -1,11 +1,11 @@
 ---
 name: microsoft-azure
-description: Azure cloud infrastructure security telemetry for detection engineering — Azure Activity Log and Resource Manager operations, Azure RBAC model (roles, scopes, PIM), managed identity mechanics, Key Vault access patterns, storage account security, virtual machine and compute operations, network security groups, Azure Policy and Defender for Cloud signals, and the mapping between Azure operations and Sentinel/Defender telemetry. Use when authoring detections targeting Azure resource abuse, privilege escalation, data exfiltration, or persistence at the infrastructure layer. For Entra ID identity detections, use entra-id-protection instead.
+description: Azure cloud infrastructure security telemetry for detection engineering — Azure Activity Log and Resource Manager operations, Azure RBAC model (roles, scopes, PIM), managed identity mechanics, Key Vault access patterns, storage account security, virtual machine and compute operations, network security groups, Azure Policy and Defender for Cloud signals, and the mapping between Azure operations and Sentinel/Defender telemetry. Use when authoring detections targeting Azure resource abuse, privilege escalation, data exfiltration, or persistence at the infrastructure layer. For Entra ID identity detections, use `entra-id` instead.
 ---
 
 # Microsoft Azure — detection-relevant internals
 
-This skill covers Azure cloud infrastructure security. For Entra ID (identity/authentication), see `entra-id-protection`. For Sentinel query mechanics, see `microsoft-sentinel`.
+This skill covers Azure cloud infrastructure security. For Entra ID (identity/authentication), see `entra-id`. For Sentinel query mechanics, see `microsoft-sentinel`.
 
 ---
 
@@ -154,28 +154,109 @@ Key Vault diagnostic logs go to `AzureDiagnostics` with `ResourceType` = `VAULTS
 
 ---
 
-## 9. Telemetry mapping
+## 9. Privilege escalation paths
 
-| Azure operation | Sentinel table | Notes |
+Azure RBAC misconfigurations and API permission abuse enable privilege escalation.
+
+### Role assignment abuse
+
+| Escalation method | Required role/permission | ARM operation | Detection signal |
+|---|---|---|---|
+| Assign Owner to self at subscription scope | User Access Administrator | `Microsoft.Authorization/roleAssignments/write` | Role assignment at subscription/MG scope |
+| Assign Contributor to self | User Access Administrator | `Microsoft.Authorization/roleAssignments/write` | New role assignment from non-admin |
+| Create custom role with wildcard actions | Owner | `Microsoft.Authorization/roleDefinitions/write` | Custom role with `*` actions |
+| Elevate to Global Admin via subscription | Owner at root MG | `Microsoft.Authorization/elevateAccess/action` | Elevation API call — always high-signal |
+
+### Compute-based escalation
+
+| Escalation method | Mechanism | ARM operation |
 |---|---|---|
-| ARM operations | `AzureActivity` | Control plane — always available |
-| Entra ID operations | `AuditLogs`, `SigninLogs` | Identity plane |
-| Key Vault operations | `AzureDiagnostics` (ResourceType=VAULTS) | Requires diagnostic settings |
-| Storage operations | `StorageBlobLogs`, `AzureDiagnostics` | Requires diagnostic settings |
-| NSG flow logs | `AzureNetworkAnalytics_CL` | Requires NSG flow log configuration |
-| Defender alerts | `SecurityAlert` | Requires Defender for Cloud |
+| VM extension — arbitrary code execution | Install custom script extension on VM | `Microsoft.Compute/virtualMachines/extensions/write` |
+| Run Command — remote code execution | Execute commands via ARM API | `Microsoft.Compute/virtualMachines/runCommand/action` |
+| Custom script during VM creation | User data / custom script extension | `Microsoft.Compute/virtualMachines/write` |
+| Automation Account runbook | Create/modify runbook with managed identity | `Microsoft.Automation/automationAccounts/runbooks/write` |
+| Logic App with managed identity | Create Logic App that calls ARM APIs | `Microsoft.Logic/workflows/write` |
+| Function App with managed identity | Deploy function that uses MI to access resources | `Microsoft.Web/sites/write` |
+
+### Data-plane escalation
+
+| Escalation method | Mechanism | Detection signal |
+|---|---|---|
+| Storage account key extraction | `listKeys` exposes full account access | `Microsoft.Storage/storageAccounts/listKeys/action` |
+| Key Vault secret access | Access secrets via data plane | `SecretGet` in Key Vault diagnostic logs |
+| Managed identity token theft | IMDS token used from outside Azure | `CallerIpAddress` is non-Azure IP for MI operations |
+| SAS token generation with excessive scope | Generate SAS with broad permissions | Storage analytics logs — SAS usage from unexpected IP |
 
 ---
 
-## 10. Quality checklist
+## 10. Subscription and management group attacks
+
+| Attack vector | ARM operation | Detection signal |
+|---|---|---|
+| **Subscription takeover** | Transfer subscription to attacker tenant | `Microsoft.Subscription/cancel`, transfer operations |
+| **Management group manipulation** | Move subscription between MGs | `Microsoft.Management/managementGroups/write` |
+| **Policy exemption** | Exempt resources from Azure Policy | `Microsoft.Authorization/policyExemptions/write` |
+| **Resource lock removal** | Remove delete locks | `Microsoft.Authorization/locks/delete` |
+| **Diagnostic settings removal** | Disable logging | `Microsoft.Insights/diagnosticSettings/delete` |
+| **Blueprint assignment change** | Modify governance blueprints | `Microsoft.Blueprint/blueprintAssignments/write` |
+
+---
+
+## 11. Container and serverless attacks
+
+### AKS (Azure Kubernetes Service)
+
+| Attack vector | Detection signal |
+|---|---|
+| Privileged pod deployment | Kubernetes audit logs — pod spec with `privileged: true` |
+| AKS admin credential access | `Microsoft.ContainerService/managedClusters/listClusterAdminCredential/action` |
+| Cluster role binding escalation | Kubernetes RBAC changes in audit logs |
+| Container registry image poisoning | `Microsoft.ContainerRegistry/registries/push/write` |
+| AKS managed identity abuse | MI token used for ARM operations from cluster |
+
+### Azure Functions / Logic Apps
+
+| Attack vector | Detection signal |
+|---|---|
+| Function deployment with MI accessing Key Vault | `Microsoft.Web/sites/write` + subsequent `SecretGet` |
+| Logic App connector to external service | `Microsoft.Logic/workflows/write` with external connector |
+| Function with VPC integration accessing internal resources | Network-level detection via NSG flow logs |
+| Timer-triggered function for persistence | `Microsoft.Web/sites/write` with timer trigger |
+
+---
+
+## 12. SIEM ingestion patterns
+
+> Table/index names are SIEM-specific. Consult your SIEM's Azure integration documentation for exact table names and connector configurations.
+
+| Azure source | Telemetry type | Ingestion method | Notes |
+|---|---|---|---|
+| Activity Log | ARM control-plane operations | Built-in SIEM connector / Event Hub | Always available — primary detection source |
+| Entra ID Audit + Sign-in Logs | Identity-plane operations | Built-in SIEM connector / Event Hub | See `entra-id` skill |
+| Key Vault diagnostic logs | Data-plane secret/key/cert operations | Diagnostic settings → Event Hub / storage | Must be explicitly enabled |
+| Storage diagnostic logs | Blob/file/queue/table operations | Diagnostic settings → Event Hub / storage | Must be explicitly enabled |
+| NSG flow logs | Network flow metadata | Storage account → SIEM connector | Requires NSG flow log configuration |
+| Defender for Cloud alerts | Threat detections | Built-in SIEM connector / Event Hub | Requires Defender for Cloud |
+| Azure Policy events | Compliance and policy evaluation | Activity Log (Policy category) | Always available |
+| AKS audit logs | Kubernetes API server audit | Diagnostic settings → Event Hub / storage | Must be explicitly enabled |
+
+---
+
+## 13. Quality checklist
 
 - [ ] `OperationNameValue` used as primary filter (not `OperationName` which is display-friendly).
 - [ ] `ActivityStatusValue` checked for `Succeeded` (not just any status).
 - [ ] `Caller` distinguished between UPN (user) and GUID (service principal).
-- [ ] RBAC scope considered (subscription-level role assignment is higher signal than resource-level).
+- [ ] RBAC scope considered — subscription/MG-level role assignment is higher signal than resource-level.
 - [ ] PIM activation vs permanent assignment distinguished.
-- [ ] Managed identity token usage validated against expected source (Azure IP).
+- [ ] Managed identity token usage validated against expected source (Azure IP range).
 - [ ] Key Vault diagnostic logging requirement declared.
 - [ ] Storage account data plane logging requirement declared.
 - [ ] VM extension and Run Command operations monitored.
 - [ ] Cross-tenant/cross-subscription operations flagged.
+- [ ] Privilege escalation paths monitored: role assignment creation, custom role creation, `elevateAccess` API.
+- [ ] Compute-based escalation monitored: VM extensions, Run Command, Automation runbooks.
+- [ ] Subscription-level governance changes monitored: policy exemptions, lock removal, diagnostic settings deletion.
+- [ ] AKS admin credential access and privileged pod deployment monitored.
+- [ ] Storage `listKeys` operations from non-admin principals flagged.
+- [ ] `entra-id` skill referenced for identity-plane detections (not duplicated here).

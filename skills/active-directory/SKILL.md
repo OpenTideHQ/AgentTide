@@ -182,23 +182,22 @@ Certificates can authenticate via:
 
 ---
 
-## 8. Telemetry mapping
+## 8. Telemetry sources
 
-| AD operation | Windows EID | Sysmon EID | Defender for Identity table |
-
-> The "Defender for Identity table" column refers to Microsoft Defender for Identity / Defender XDR. Other SIEMs ingest the underlying Windows Event IDs via their own log collection.
-
+| AD operation | Windows Event ID | Sysmon EID | Log source |
 |---|---|---|---|
-| Kerberos TGT request | 4768 | — | `IdentityLogonEvents` |
-| Kerberos service ticket | 4769 | — | `IdentityLogonEvents` |
-| Kerberos pre-auth failure | 4771 | — | `IdentityLogonEvents` |
-| NTLM authentication | 4776 | — | `IdentityLogonEvents` |
-| Logon event | 4624/4625 | — | `DeviceLogonEvents` |
-| Directory service change | 5136/5137 | — | `IdentityDirectoryEvents` |
-| Object access (replication) | 4662 | — | `IdentityDirectoryEvents` |
-| Certificate request | 4886/4887 | — | — |
-| GPO modification | 5136 | 12/13 (registry) | `IdentityDirectoryEvents` |
-| LDAP query | 1644 (diagnostic) | — | `IdentityQueryEvents` |
+| Kerberos TGT request | 4768 | — | Domain controller Security log |
+| Kerberos service ticket | 4769 | — | Domain controller Security log |
+| Kerberos pre-auth failure | 4771 | — | Domain controller Security log |
+| NTLM authentication | 4776 | — | Domain controller Security log |
+| Logon event | 4624/4625 | — | Endpoint Security log |
+| Directory service change | 5136/5137 | — | Domain controller Security log |
+| Object access (replication) | 4662 | — | Domain controller Security log |
+| Certificate request | 4886/4887 | — | CA server Security log |
+| GPO modification | 5136 | 12/13 (registry) | Domain controller Security log |
+| LDAP query | 1644 (diagnostic) | — | Domain controller (requires diagnostic logging enabled) |
+
+> Map these Event IDs to your SIEM's tables/indexes. Consult the relevant platform skill (`microsoft-sentinel`, `splunk-spl-processing`, etc.) for ingestion specifics.
 
 ---
 

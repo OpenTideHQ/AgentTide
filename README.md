@@ -121,8 +121,6 @@ Useful when you want to contribute back to AgentTide or keep it as a standalone 
 
 ### Harness-specific notes
 
-Once the skills are in your project, most agents discover them automatically. Here are harness-specific details for the most popular tools:
-
 All major agents — **VS Code/Copilot**, **Cursor**, **Claude Code**, **Codex**, **Gemini CLI**, **Junie**, **Amp**, **Kiro**, and others — discover skills from `.agents/skills/` and read `AGENTS.md` from the project root automatically. If you used any of the installation methods above, **no extra configuration is needed**.
 
 <details>

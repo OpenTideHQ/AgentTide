@@ -39,7 +39,7 @@ Client                    KDC (Domain Controller)           Service
 1. Attacker requests TGS for accounts with SPNs (Service Principal Names)
 2. TGS is encrypted with the service account's password hash
 3. Attacker cracks the TGS offline — no lockout, no detection of cracking
-4. **Detection**: EID 4769 with encryption type `0x17` (RC4-HMAC) for service accounts. Modern environments should use AES (0x12). RC4 requests are anomalous.
+4. **Detection**: EID 4769 with encryption type `0x17` (RC4-HMAC) for service accounts. Modern environments should use AES (0x12). RC4 requests are anomalous in environments that have fully migrated to AES. Audit for legacy applications that legitimately require RC4 before alerting.
 
 ### AS-REP roasting mechanics
 
@@ -184,7 +184,10 @@ Certificates can authenticate via:
 
 ## 8. Telemetry mapping
 
-| AD operation | Windows EID | Sysmon EID | Defender table |
+| AD operation | Windows EID | Sysmon EID | Defender for Identity table |
+
+> The "Defender for Identity table" column refers to Microsoft Defender for Identity / Defender XDR. Other SIEMs ingest the underlying Windows Event IDs via their own log collection.
+
 |---|---|---|---|
 | Kerberos TGT request | 4768 | — | `IdentityLogonEvents` |
 | Kerberos service ticket | 4769 | — | `IdentityLogonEvents` |
@@ -210,4 +213,5 @@ Certificates can authenticate via:
 - [ ] LDAP query patterns correlated with source account privilege level.
 - [ ] GPO modifications tracked via directory service change events.
 - [ ] Trust relationships documented and SID filtering status verified.
+- [ ] `sIDHistory` attribute modifications monitored (EID 5136) — injection of privileged SIDs enables persistence.
 - [ ] Machine account NTLM coercion considered (PetitPotam, PrinterBug, DFSCoerce).

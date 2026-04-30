@@ -1,63 +1,202 @@
 <table align="center"><tr><td align="center" width="9999">
-<img src="agenttide-logo.png" align="center" width="150" alt="Project icon">
+<img src="agenttide-logo.png" align="center" width="150" alt="AgentTide logo">
 
 # AgentTide
 
-_The Open Source AI Agent Harness for OpenTide_
+_Open Source Agent Skills for Detection Engineering_
 
 </td></tr></table>
 
-## Agent-assisted Detection Engineering
+**AgentTide** is the agent harness layer of the [OpenTide](https://github.com/OpenTideHQ) family. It packages the operational tribal knowledge that detection engineers carry — platform quirks, query-language gotchas, schema conventions, workflow discipline — into portable, version-controlled **[Agent Skills](https://agentskills.io)** that any compatible AI coding agent can load on demand.
 
-**AgentTide** is the agent harness layer of the OpenTide family. It encodes the operational tribal knowledge required for autonomous coding assistants — Cursor, Claude Code, Codex, and any other tool that ingests `AGENTS.md` — to author, review, and operationalise detection content across the OpenTide framework. Where **CoreTide** is the engine and **ShareTide** is the shared content corpus, AgentTide is the **shared brain** for the agents that work alongside detection engineers.
+Where **[CoreTide](https://github.com/OpenTideHQ/CoreTide)** is the engine and **[ShareTide](https://github.com/OpenTideHQ/ShareTide)** is the shared content corpus, AgentTide is the **shared brain** for the agents that work alongside you.
 
-### Features
+---
 
-- **Unified entrypoint** — a single `AGENTS.md` consumed by all major agent runners, no proprietary filename stubs to maintain
-- **[Agent Skills](https://agentskills.io/specification)-compliant skill matrix** — each capability is a self-contained directory with `SKILL.md` + optional `references/`, discoverable via YAML frontmatter
-- **OpenTide-native object authoring** — Threat Vectors, Detection Objectives, Detection Rules covered end-to-end
-- **Hypothesis discipline** — ABLE framework, scoring, anti-pattern catalogues for hunt → detection conversion
-- **Platform-tribal knowledge** — KQL operator hierarchy, Sentinel/Defender ResultType codes, NRT constraints, FileProfile null-handling, Storyline IDs, FQL vs CQL surface boundaries — all the things an LLM gets wrong without being told
-- **Cross-harness compatible** — works the same in any tool that reads `AGENTS.md`
+## What are Agent Skills?
 
-### Skill matrix
+[Agent Skills](https://agentskills.io) are an open standard for giving AI coding agents specialised knowledge. A skill is simply a folder containing a `SKILL.md` file with YAML frontmatter (`name`, `description`) and Markdown instructions, plus optional `references/`, `scripts/`, and `assets/` subdirectories.
 
-See the [full skills index in AGENTS.md](AGENTS.md#skills-index-agenttideskills) for the authoritative list. Skills span three categories:
+```
+opentide-threat-vector/
+├── SKILL.md                        # Core instructions (loaded when activated)
+└── references/
+    └── Chaining-Patterns.md        # Loaded on demand
+```
 
-- **OpenTide content authoring** — TVM, DOM, MDR object lifecycle
-- **Detection engineering practice** — hunt-to-rule conversion, hypothesis discipline, ATT&CK mapping
-- **Languages & platforms** — KQL, SPL, FQL/CQL, DVQL, Sigma/RHQL, plus platform-specific tribal knowledge for Microsoft Sentinel, Defender for Endpoint, Splunk, CrowdStrike Falcon, Carbon Black Cloud, SentinelOne Singularity, HarfangLab, Entra ID, and Windows event logs
+**How they work:**
 
-### Quick start
+1. **Discovery** — at startup, the agent reads only the `name` and `description` of each skill (~100 tokens each). This is cheap and always-on.
+2. **Activation** — when a task matches a skill's description, the agent loads the full `SKILL.md` body into context.
+3. **Execution** — the agent follows the instructions, loading reference files or running scripts only when needed.
 
-1. Drop AgentTide into your repository as a sibling of your OpenTide content, or vendor it via submodule / sparse checkout.
-2. Ensure your agent reads `AGENTS.md` from the repository root.
-3. Skills are discovered automatically by tools that follow the [Agent Skills](https://agentskills.io/specification) spec — no further configuration required.
-4. Pair with **[CoreTide](https://github.com/OpenTideHQ/CoreTide)** for the deployment engine and **[ShareTide](https://github.com/OpenTideHQ/ShareTide)** for community-shared content.
+This means you can have dozens of skills available without bloating the agent's context window — it only loads what it needs, when it needs it.
 
-### Repository layout
+```mermaid
+flowchart LR
+    A[Scan skills] --> B{Match?}
+    B -- Yes --> C[Load SKILL.md]
+    B -- No --> D[Skip]
+    C --> E[Execute]
+    E --> F[Load refs if needed]
+    F --> G[TVM · DOM · MDR]
+    style G fill:#e94560,stroke:#e94560,color:#fff
+```
+
+> **Why not just paste documentation into the prompt?** Skills are version-controlled, shareable across teams, and work identically across every compatible agent product. Write once, use everywhere.
+
+---
+
+## What's in AgentTide?
+
+### 27 skills across four categories
+
+| Category | Skills | What they cover |
+|----------|--------|-----------------|
+| **OpenTide content authoring** | 3 | TVM, DOM, MDR object lifecycle — from intelligence intake to schema-valid YAML |
+| **Detection engineering practice** | 3 | Hunt-to-rule conversion, ABLE hypothesis framework, ATT&CK v19 mapping |
+| **Languages & platforms** | 14 | KQL, SPL, FQL/CQL, DVQL, Sigma/RHQL — plus platform-specific tribal knowledge for Sentinel, Defender for Endpoint, Splunk, CrowdStrike Falcon, Carbon Black Cloud, SentinelOne, HarfangLab, Entra ID, Okta, AWS, Azure, GCP, and Windows Event Logs |
+| **Defensive internals** | 7 | Windows/Linux/macOS internals, Active Directory, identity providers, network protocols, email & collaboration |
+
+See the [full skills index in AGENTS.md](AGENTS.md#skills-index-agenttideskills) for the authoritative list with descriptions.
+
+### Unified `AGENTS.md`
+
+A single [`AGENTS.md`](https://agents.md/) file at the repository root provides cross-cutting instructions consumed by all agent runners — prime directives, OpenTide framework essentials, workflow guidelines, guardrails, and the skills index. `AGENTS.md` is an [open standard](https://agents.md/) for guiding coding agents, used by over 60k open-source projects and supported by Codex, Cursor, Claude Code, Gemini CLI, VS Code/Copilot, Amp, Windsurf, and many more. No proprietary filename stubs to maintain.
+
+---
+
+## Installation
+
+AgentTide skills work with any tool that supports the [Agent Skills specification](https://agentskills.io/specification). The cross-harness default location is **`.agents/skills/`** in your project root — most compatible agents discover skills there automatically.
+
+Pick the method that suits your workflow:
+
+### Option 1 — One-liner with `npx skills add` (easiest)
+
+The community [`skills`](https://www.npmjs.com/package/skills) CLI can install skills directly from GitHub into `.agents/skills/`:
+
+```bash
+npx skills add OpenTideHQ/AgentTide
+```
+
+This copies the skill directories into your project. No git history, no submodules — just the files. Requires Node.js.
+
+### Option 2 — Manual download (no tooling required)
+
+Download the repository as a ZIP from GitHub and copy the `skills/` contents into your project:
+
+```bash
+# Download and extract
+curl -sL https://github.com/OpenTideHQ/AgentTide/archive/refs/heads/main.tar.gz | tar xz
+
+# Copy skills into the cross-harness default location
+mkdir -p .agents/skills
+cp -r AgentTide-main/skills/* .agents/skills/
+
+# Optionally copy the AGENTS.md entrypoint
+cp AgentTide-main/AGENTS.md .
+
+# Clean up
+rm -rf AgentTide-main
+```
+
+### Option 3 — Git submodule (stays in sync)
+
+```bash
+git submodule add https://github.com/OpenTideHQ/AgentTide.git .agents/AgentTide
+```
+
+This pins AgentTide to a specific commit. Update with `git submodule update --remote`. Most agents discover skills inside submodule directories automatically.
+
+### Option 4 — Git clone as a sibling (for development)
+
+```bash
+git clone https://github.com/OpenTideHQ/AgentTide.git
+```
+
+Useful when you want to contribute back to AgentTide or keep it as a standalone reference alongside your OpenTide content repository.
+
+---
+
+### Harness-specific notes
+
+All major agents — **VS Code/Copilot**, **Cursor**, **Claude Code**, **Codex**, **Gemini CLI**, **Junie**, **Amp**, **Kiro**, and others — discover skills from `.agents/skills/` and read `AGENTS.md` from the project root automatically. If you used any of the installation methods above, **no extra configuration is needed**.
+
+<details>
+<summary><strong>Harness-specific documentation links</strong></summary>
+
+| Agent | Skills docs | Notes |
+|-------|------------|-------|
+| **VS Code / GitHub Copilot** | [Agent Skills](https://code.visualstudio.com/docs/copilot/customization/agent-skills) · [Custom instructions](https://code.visualstudio.com/docs/copilot/customization/custom-instructions) | Reads `.agents/skills/` and `AGENTS.md` automatically. Type `/skills` in Agent mode to verify. |
+| **Cursor** | [Skills](https://cursor.com/docs/context/skills) | Reads `.agents/skills/` and `AGENTS.md` automatically. |
+| **Claude Code** | [Skills](https://code.claude.com/docs/en/skills) | Reads `.agents/skills/`, `.claude/skills/`, and `AGENTS.md` automatically. |
+| **OpenAI Codex** | [Skills](https://developers.openai.com/codex/skills/) | Reads `AGENTS.md` automatically. |
+| **Gemini CLI** | [Skills](https://geminicli.com/docs/cli/skills/) | Reads `.agents/skills/` automatically. |
+| **Junie (JetBrains)** | [Skills](https://junie.jetbrains.com/docs/agent-skills.html) | Reads `.agents/skills/` automatically. |
+| **Amp** | [Skills](https://ampcode.com/manual#agent-skills) | Reads `AGENTS.md` automatically. |
+| **Roo Code** | [Skills](https://docs.roocode.com/features/skills) | Reads `.agents/skills/` automatically. |
+| **Kiro** | [Skills](https://kiro.dev/docs/skills/) | Reads `.agents/skills/` automatically. |
+
+For the full ecosystem of compatible agents, see the [Agent Skills client showcase](https://agentskills.io/clients).
+
+</details>
+
+---
+
+## Repository layout
 
 ```
 AgentTide/
 ├── AGENTS.md                          # Unified agent entrypoint
 ├── skills/                            # Agent Skills directory
-│   ├── opentide-threat-vector/SKILL.md
+│   ├── opentide-threat-vector/
+│   │   └── SKILL.md
 │   ├── kusto-query-language/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   │       ├── Best-Practices.md
 │   │       └── Hypothesis-Anti-Patterns.md
-│   └── ...
+│   ├── microsoft-sentinel/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       └── Anti-Patterns.md
+│   └── ...                            # 27 skills total
 ├── LICENSE                            # EUPL 1.2
 └── README.md
 ```
 
-### Contributing
+---
 
-Substantive changes to the harness — new skills, refactors, schema-affecting edits — land through reviewed pull requests against `main`. Skill content should be grounded in real production experience, not LLM-generated generalities. See [Agent Skills best practices](https://agentskills.io/skill-creation/best-practices) for authoring guidance, and the existing skills for the expected depth of tribal knowledge.
+## The OpenTide ecosystem
 
-> If you would like to see a new platform, query language, or workflow covered, open an issue with concrete operational notes — vendor documentation links, real query examples, known gotchas — that we can shape into a skill.
+AgentTide is one part of a three-layer architecture:
 
-### Licence
+| Layer | Repository | Role |
+|-------|-----------|------|
+| **Engine** | [CoreTide](https://github.com/OpenTideHQ/CoreTide) | Schema validation, object indexing, CI/CD pipelines for detection-as-code |
+| **Content** | [ShareTide](https://github.com/OpenTideHQ/ShareTide) | Community-shared `TLP:CLEAR` OpenTide objects — threat vectors, detection objectives, detection rules |
+| **Agent harness** | **AgentTide** (this repo) | Agent Skills and instructions that teach AI assistants how to author, review, and operationalise detection content |
+
+---
+
+## Contributing
+
+Substantive changes to the harness — new skills, refactors, schema-affecting edits — land through reviewed pull requests against `main`. Skill content should be grounded in real production experience, not LLM-generated generalities.
+
+**Want to contribute a skill?**
+
+1. Read the [Agent Skills specification](https://agentskills.io/specification) and [best practices](https://agentskills.io/skill-creation/best-practices).
+2. Study existing skills in this repository for the expected depth of tribal knowledge.
+3. Create a new directory under `skills/` with a `SKILL.md` containing YAML frontmatter and Markdown instructions.
+4. Open a pull request with a clear description of what the skill covers and why.
+
+**Want to request a skill?**
+
+Open an issue with concrete operational notes — vendor documentation links, real query examples, known gotchas — that we can shape into a skill.
+
+---
+
+## Licence
 
 Distributed under the [European Union Public Licence v. 1.2](LICENSE) — the same licence used across the OpenTide project.

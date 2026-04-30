@@ -67,18 +67,22 @@ For each claim, formulate an ABLE-complete hypothesis:
 
 ### Step 2b — Evidence platform selection
 
-| Evidence domain | Primary platform | Example tables |
+Map each behavioural component to the telemetry domain and platform family that captures it. Exact table/index names are platform-specific — consult the relevant platform skill.
+
+| Evidence domain | Platform family | Telemetry type |
 |---|---|---|
-| Process execution, file ops, registry | Defender / equivalent EDR | `DeviceProcessEvents`, `DeviceFileEvents`, `DeviceRegistryEvents` |
-| Device-level network connections | Defender / equivalent EDR | `DeviceNetworkEvents` |
-| Email delivery, URL clicks | Defender / equivalent | `EmailEvents`, `EmailUrlInfo`, `UrlClickEvents` |
-| Identity / sign-in activity | SIEM (Sentinel, Splunk, etc.) | `SigninLogs`, `AADNonInteractiveUserSignInLogs` |
-| Cloud directory configuration | SIEM | `AuditLogs` |
-| Cloud resource operations | SIEM | `AzureActivity` |
-| SaaS activity | SIEM | `OfficeActivity`, `CloudAppEvents` |
-| Network appliance logs | SIEM | `CommonSecurityLog`, `Syslog` |
-| Windows Security Events | SIEM | `SecurityEvent` |
-| DNS resolution | SIEM | `DnsEvents` |
+| Process execution, file operations, registry | EDR | Process creation logs, file event logs, registry modification logs |
+| Device-level network connections | EDR | Network connection / socket logs |
+| Email delivery, URL clicks | Email security / XDR | Mail flow logs, URL click telemetry |
+| Identity / sign-in activity | IdP / SIEM | Authentication logs, sign-in logs (interactive + non-interactive) |
+| Cloud directory configuration | IdP / SIEM | Directory audit / change logs |
+| Cloud resource operations | SIEM / cloud-native | Cloud activity / control-plane audit logs |
+| SaaS activity | SIEM / CASB | Unified audit logs, application activity logs |
+| Network appliance logs | SIEM | Firewall, proxy, IDS/IPS logs (CEF, syslog, vendor-native) |
+| OS security events | SIEM / EDR | Security event logs (Windows Security, auditd, etc.) |
+| DNS resolution | SIEM / DNS security | DNS query and response logs |
+
+> Consult platform skills for exact table/index names: `microsoft-sentinel`, `microsoft-defender-endpoint`, `splunk-spl-processing`, `crowdstrike-falcon`, `sentinelone-singularity`, `carbon-black-cloud`, `harfanglab`.
 
 **Cross-platform hypotheses** are valid: a single hypothesis may reference evidence on **both** an EDR and a SIEM platform. Author **separate queries per platform** with the correct platform tag — never attempt cross-platform joins.
 
@@ -90,7 +94,7 @@ If no table on any available platform covers a behavioural component, register a
 data_gaps:
   - domain: Network appliance logs
     platform: BOTH
-    table: CommonSecurityLog
+    telemetry: Firewall / proxy logs (CEF, syslog, or vendor-native)
     description: Firewall/proxy logs needed but not ingested
     impact: BLIND_SPOT
 ```
@@ -231,9 +235,9 @@ Break ABLE Behaviour into observable telemetry events:
 Before executing:
 
 1. **Platform dispatch** — every query has a platform tag.
-2. **Column validity** — every column exists in the target platform's table reference.
-3. **No cross-platform contamination** — Defender columns in Defender queries; Sentinel columns in Sentinel queries.
-4. **Time bounds** — every query has an explicit `ago()` filter (or NRT semantics, intentionally).
+2. **Column validity** — every column exists in the target platform's table/index reference.
+3. **No cross-platform contamination** — each query uses only columns and syntax valid for its tagged platform.
+4. **Time bounds** — every query has an explicit lookback filter appropriate to the query language (or NRT semantics, intentionally).
 5. **Data gaps** — hypotheses with `HYPOTHESIS_BLOCKED` flagged, not executed.
 
 For language-level discipline (filter ordering, operator selection, comments, FP engineering), apply `kusto-query-language` (or the relevant query-language skill).
@@ -262,7 +266,7 @@ Per-platform runners and exit-code semantics live in platform-specific guides. T
 | Active C2 beaconing | 7 days | Current-state indicator |
 | Data exfiltration | 7–14 days | Recent activity, high data volume |
 
-Override when the source intelligence specifies a campaign timeframe. Respect platform retention caps (Defender ~30 days; Sentinel workspace-configurable).
+Override when the source intelligence specifies a campaign timeframe. Respect platform retention caps — EDR platforms typically retain 30–90 days; SIEM retention varies by configuration and licence tier. Check the relevant platform skill for exact limits.
 
 ---
 
@@ -304,32 +308,7 @@ For each query returning results:
 | Attribution | Process tree / parent chain | Unknown process detected |
 | Entity correlation | Cross-table activity for the same entity | Multi-stage attack suspected |
 
-All pivot queries are logged with `is_pivot_query: true` and a pivot rationale.
-
-### Hunt report
-
-Build a structured report containing:
-- `executed_at` (ISO 8601), `executed_by`.
-- `hunting_hit` (bool), `overall_conclusion`, `total_queries_executed`, `total_results_analyzed`, `execution_duration_seconds`, `tenants_queried`, `platforms_queried`, `resource_usage`.
-- Per-hypothesis `hunt_result` with verdict, rationale, TP/FP/triage counts, key findings, result sample (capped, redacted).
-
-**Confidentiality**: hunt reports contain live environment telemetry — treat as the most sensitive TLP available in the workflow (typically TLP:RED). Hunt-report contents must not appear in tickets, notifications, or chat unless explicitly redacted.
-
-### Result storage rules
-
-- Cap result samples (e.g. 30 rows max).
-- Redact secrets in command lines (`[REDACTED]`).
-- Select diverse representative rows (devices, users, time periods).
-- Preserve platform column names.
-
-### Convergence criteria
-
-Stop when **any** of:
-1. All hypotheses have verdicts.
-2. Quota exhausted on all platforms.
-3. Auth failure on all platforms.
-4. Wall-clock budget reached (e.g. 60 min).
-5. Total query budget reached (e.g. 50 queries including pivots).
+All pivot queries carry a rationale linking them back to the original hypothesis finding.
 
 ---
 
@@ -370,44 +349,10 @@ Confirmed hunts feed TVM `chaining` and `terrain` evidence. Use `opentide-threat
 
 ---
 
-## 9. Output schema (structured hunt records)
-
-When an organisation manages hunts as structured records (JSON / YAML in a content repo), each hypothesis carries a minimum schema:
-
-```yaml
-uuid: <UUIDv4>
-name: <5-100 chars>
-statement: <ABLE-complete, ≥ 20 chars>
-rationale: <≥ 50 chars; intelligence → hypothesis → detection reasoning>
-expected_evidence:
-  - <what confirms>
-  - <what refutes>
-confidence_assessment:
-  score: HIGH | MEDIUM | LOW
-  rationale: <reasoning>
-relevance_assessment:
-  score: CRITICAL | HIGH | MODERATE | LOW
-  rationale: <reasoning>
-queries: []          # populated by language/platform skills
-priority: URGENT | HIGH | STANDARD
-hunting_effort: MINIMAL | MODERATE | SIGNIFICANT
-scope: ENTIRE_ENVIRONMENT | SPECIFIC_SEGMENTS | HIGH_VALUE_TARGETS
-mitre_techniques:
-  - T1566.001
-investigation_steps: []
-source_references:
-  - url: <original article / alert URL>
-    title: <source title>
-    quotes:
-      - <verbatim quote>
-```
-
----
-
-## 10. References
+## 9. References
 
 - `kusto-query-language/references/Hypothesis-Anti-Patterns.md` (AP-H1–H5).
-- `microsoft-sentinel/`, `microsoft-defender-endpoint/` for Microsoft data plane.
-- `splunk-spl-processing/`, `crowdstrike-falcon/`, `carbon-black-cloud/`, `sentinelone-singularity/`, `harfanglab/` for vendor surfaces.
-- `detection-engineering/` for hunt-to-rule conversion.
-- `opentide-threat-vector/`, `opentide-detection-objective/`, `opentide-detection-rule/` for content authoring.
+- `detection-engineering/` for hunt-to-rule conversion (7-step process).
+- Platform skills for query authoring and table references: `microsoft-sentinel/`, `microsoft-defender-endpoint/`, `splunk-spl-processing/`, `crowdstrike-falcon/`, `carbon-black-cloud/`, `sentinelone-singularity/`, `harfanglab/`.
+- OpenTide content skills: `opentide-threat-vector/`, `opentide-detection-objective/`, `opentide-detection-rule/`.
+- `mitre-attack-mapping/` for technique selection and coverage analysis.

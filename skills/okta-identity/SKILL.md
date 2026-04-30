@@ -7,7 +7,7 @@ description: Okta identity platform detection guidance — System Log event sche
 
 Okta is a major non-Microsoft identity platform with its own telemetry schema, attack surface, and detection patterns. This skill covers the platform internals needed to write detections against Okta System Log events, whether ingested into Sentinel, Splunk, or any other SIEM.
 
-> **Not to be confused with** `entra-id-protection` (Microsoft Entra ID) or `identity-providers` (cross-vendor identity mechanics).
+> **Not to be confused with** `entra-id` (Microsoft Entra ID) or `identity-providers` (cross-vendor identity mechanics).
 
 ---
 
@@ -128,57 +128,107 @@ Attacker modifies authentication policies to remove MFA requirements or weaken s
 
 ---
 
-## 4. SIEM ingestion patterns
+## 4. ThreatInsight and behavioural signals
 
-### Sentinel
+Okta ThreatInsight provides pre-built threat detection signals available in the System Log.
 
-Okta logs ingested via the Okta SSO connector populate the `Okta_CL` custom log table or `OktaSSO` table (depending on connector version). Key field mappings:
-
-| Okta field | Sentinel column | Notes |
+| Signal | `eventType` / field | Detection use |
 |---|---|---|
-| `eventType` | `eventType_s` | String suffix `_s` |
-| `actor.alternateId` | `actor_alternateId_s` | User email |
-| `outcome.result` | `outcome_result_s` | SUCCESS/FAILURE |
-| `client.ipAddress` | `client_ipAddress_s` | Source IP |
-| `published` | `TimeGenerated` | Event timestamp |
-| `securityContext.isProxy` | `securityContext_isProxy_b` | Boolean suffix `_b` |
+| **Credential stuffing** | `security.threat.detected` with `debugContext.debugData.threatSuspected` | Automated credential attacks against the org |
+| **Password spray** | `security.threat.detected` | Distributed password guessing |
+| **Suspicious IP** | `securityContext.isProxy` = `true` | Traffic from anonymising proxies, VPNs, Tor |
+| **Brute force lockout** | `user.account.lock` | Account locked due to repeated failures |
+| **Anomalous location** | `debugContext.debugData.behaviors` containing `New Geo-Location` | Sign-in from unusual geography |
+| **Anomalous device** | `debugContext.debugData.behaviors` containing `New Device` | Sign-in from unrecognised device |
+| **Suspicious activity report** | `user.account.report_suspicious_activity_by_enduser` | End-user self-reported compromise |
 
-### Splunk
-
-Okta logs ingested via the Splunk Add-on for Okta. Sourcetype: `OktaIM2:log`. CIM-mapped to the Authentication data model.
-
-| Okta field | Splunk CIM field | Notes |
-|---|---|---|
-| `eventType` | `action` | CIM normalised |
-| `actor.alternateId` | `user` | |
-| `outcome.result` | `action_result` | `success`/`failure` |
-| `client.ipAddress` | `src` | |
+> `debugContext.debugData.behaviors` is a JSON string containing Okta's behavioural analysis. Parse it to extract individual signals. Note: `debugContext` fields are unstable and may change between releases.
 
 ---
 
-## 5. Entity identifier alignment
+## 5. Okta Workflows and automation abuse
 
-| Concept | Okta | Entra ID | CrowdStrike |
+| Attack vector | `eventType` | Detection signal |
+|---|---|---|
+| **Workflow creation** | `system.workflow.create` | New automation — check for data exfiltration flows |
+| **Workflow modification** | `system.workflow.update` | Changed automation — may add malicious steps |
+| **Workflow with external connector** | `system.workflow.create` / `update` | Connector to external service (Slack, email, HTTP) — data exfiltration channel |
+| **Workflow execution** | `system.workflow.execute` | Automated action triggered — correlate with workflow definition |
+
+**Risk**: Okta Workflows can automate user provisioning, group membership changes, and external API calls. An attacker with admin access can create workflows that silently exfiltrate data or maintain persistence.
+
+---
+
+## 6. OAuth app and integration abuse
+
+| Attack vector | `eventType` | Detection signal |
+|---|---|---|
+| **App integration created** | `app.lifecycle.create` | New app integration — potential OAuth consent phishing |
+| **App assigned to user/group** | `app.user_membership.add` / `group.application.assignment.add` | App access granted — check if app is legitimate |
+| **OAuth scope grant** | `app.oauth2.consent.grant` | OAuth consent granted — check scope breadth |
+| **App credentials rotated** | `app.credential.update` | App secret changed — potential credential theft |
+| **SAML certificate change** | `app.credential.update` (SAML app) | Signing certificate changed — potential Golden SAML setup |
+
+**Risk**: Attackers can create rogue app integrations to harvest OAuth tokens, or modify existing SAML app certificates to forge assertions.
+
+---
+
+## 7. SIEM ingestion patterns
+
+> Column/field names vary by SIEM and connector version. Consult your SIEM's Okta integration documentation for exact field mappings.
+
+| Okta native field | Telemetry type | Ingestion method | Notes |
 |---|---|---|---|
-| User | `actor.alternateId` (email) | `UserPrincipalName` | `UserName` |
-| User ID | `actor.id` (Okta UUID) | `UserId` (AAD GUID) | `UserSid` |
-| Session | `authenticationContext.externalSessionId` | `CorrelationId` | — |
-| IP | `client.ipAddress` | `IPAddress` | `aip` |
-| Application | `target[].alternateId` (app label) | `AppDisplayName` | — |
+| System Log events | Identity audit log | SIEM connector (API polling or Event Hook) | Primary detection source |
+| `eventType` | Event classifier | Mapped to SIEM-specific field | Use as primary filter |
+| `actor.alternateId` | User identity | Mapped to SIEM user field | Email address |
+| `outcome.result` | Action result | Mapped to SIEM result field | SUCCESS / FAILURE |
+| `client.ipAddress` | Source IP | Mapped to SIEM source IP field | Client IP |
+| `published` | Event timestamp | Mapped to SIEM timestamp field | ISO 8601 |
+| `securityContext` | IP reputation | Mapped to SIEM enrichment fields | Proxy, ASN, ISP |
 
-Cross-platform correlation on `actor.alternateId` ↔ `UserPrincipalName` when the email matches.
+### Ingestion methods
+
+| Method | Latency | Notes |
+|---|---|---|
+| **API polling** (System Log API) | Minutes | Most common; SIEM polls `/api/v1/logs` on interval |
+| **Event Hooks** (webhook push) | Near-real-time | Okta pushes events to SIEM endpoint; requires SIEM webhook receiver |
+| **Log streaming** (AWS EventBridge) | Near-real-time | Native integration for AWS-based SIEMs |
 
 ---
 
-## 6. Quality checklist
+## 8. Cross-platform entity correlation
+
+When correlating Okta events with other identity or endpoint platforms, align on these entity categories:
+
+| Entity type | Okta field | Correlation key |
+|---|---|---|
+| **User** | `actor.alternateId` (email) | Email / UPN — matches across most IdPs when email is consistent |
+| **User ID** | `actor.id` (Okta UUID) | Platform-specific — requires mapping table for cross-platform joins |
+| **Session** | `authenticationContext.externalSessionId` | Okta-specific — correlate within Okta events only |
+| **IP address** | `client.ipAddress` | Universal — correlate across all platforms |
+| **Application** | `target[].alternateId` (app label) | App name — may differ across platforms; use app ID where available |
+| **Device** | `client.device` / `debugContext.debugData.dtHash` | Device hash — Okta-specific; correlate with endpoint platforms via device ID mapping |
+
+> Cross-platform correlation works best on `actor.alternateId` (email) ↔ UPN when the email address is consistent across identity platforms. For user ID correlation, maintain a mapping table between Okta UUIDs and other platform identifiers.
+
+---
+
+## 9. Quality checklist
 
 - [ ] `eventType` used as primary filter (not `displayMessage` which is human-readable and unstable).
 - [ ] `outcome.result` checked for SUCCESS/FAILURE as appropriate.
-- [ ] `target[]` searched by `type`, not array index.
+- [ ] `target[]` searched by `type`, not array index (target order is not guaranteed).
 - [ ] `securityContext.isProxy` considered for anonymising proxy detection.
 - [ ] `authenticationContext.externalSessionId` used for session correlation.
 - [ ] `debugContext.debugData` fields treated as unstable (may change between releases).
-- [ ] SIEM field name suffixes correct (`_s`, `_b`, `_d` for Sentinel custom logs).
+- [ ] SIEM field mappings validated against connector documentation (field names vary by SIEM and connector version).
 - [ ] Admin account detections scoped to Super Administrator / Org Administrator roles.
-- [ ] Inbound federation events monitored if feature is not in use.
-- [ ] API token creation and usage monitored.
+- [ ] Inbound federation events (`system.idp.lifecycle.*`) monitored — especially if feature is not in use.
+- [ ] API token creation (`system.api_token.create`) and usage (`transaction.detail.requestApiTokenId`) monitored.
+- [ ] ThreatInsight signals (`security.threat.detected`) ingested and correlated.
+- [ ] Okta Workflows creation and modification monitored for data exfiltration risk.
+- [ ] OAuth app integration creation and scope grants monitored.
+- [ ] MFA factor reset for admin accounts always generates high-severity alerts.
+- [ ] Session hijacking detection: IP/ASN change mid-session on `externalSessionId`.
+- [ ] Delegated authentication limitations documented (Okta cannot detect password spray against AD-delegated auth).

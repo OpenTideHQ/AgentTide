@@ -274,16 +274,17 @@ SourceTable
 // --- END ENVIRONMENT FILTERS ---
 ```
 
-**Alert deduplication** via `leftanti` against existing alerts/incidents:
+**Alert deduplication** via `leftanti` against existing alerts/incidents (adapt table/column names per platform):
 
 ```kql
+// Pattern: exclude entities already in recent alerts
 | join kind=leftanti (
-    SecurityAlert
-    | where TimeGenerated > ago(7d)
+    AlertTable                              // Platform-specific alert table
+    | where TimeField > ago(7d)
     | where Status != "Dismissed"
-    | extend AlertEntity = tostring(parse_json(Entities)[0].UserPrincipalName)
+    | extend AlertEntity = tostring(parse_json(Entities)[0].EntityIdentifier)
     | project AlertEntity
-) on $left.UserPrincipalName == $right.AlertEntity
+) on $left.EntityColumn == $right.AlertEntity
 ```
 
 ---
@@ -312,16 +313,17 @@ FileTable
 | where TimeGenerated > ago(30d)
 | where SHA256 in (malicious_hashes)
 
-// Base64-encoded payload pipeline (Defender DeviceProcessEvents shape)
-DeviceProcessEvents
-| where Timestamp > ago(14d)
+// Base64-encoded payload pipeline
+// NOTE: Replace table/column names per platform skill (Defender: DeviceProcessEvents/Timestamp; Sentinel: SecurityEvent or Event/TimeGenerated)
+ProcessTable
+| where TimeField > ago(14d)
 | where FileName in~ ("powershell.exe", "pwsh.exe")
 | where ProcessCommandLine has_any ("-enc", "-encodedcommand", "-e ")
 | parse ProcessCommandLine with * "-enc" * " " EncodedBlock:string
 | extend DecodedCommand = base64_decode_tostring(EncodedBlock)
 | where isnotempty(DecodedCommand)
 | where DecodedCommand has_any ("Invoke-WebRequest", "DownloadString", "IEX")
-| project Timestamp, DeviceName, AccountName, DecodedCommand, ProcessCommandLine
+| project TimeField, DeviceName, AccountName, DecodedCommand, ProcessCommandLine
 ```
 
 ---

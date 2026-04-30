@@ -11,7 +11,7 @@ An MDR is the **deployable artefact** — the detection rule that runs on a spec
 
 ## Preconditions
 
-1. Hydrate **`Schemas/Templates`** for MDR (`mdr::2.1`) and compare with active JSON schemas.
+1. Hydrate **`Schemas/Templates`** for MDR (e.g. `mdr::2.1` — always check the live template for the current version) and compare with active JSON schemas.
 2. Confirm **DOM linkage** integrity — the signal you operationalise must exist and remain authoritative.
 3. Consult tenant **`Configurations/systems`** to know which backends are licensed and routed through CoreTide deployments.
 
@@ -25,7 +25,7 @@ An MDR is the **deployable artefact** — the detection rule that runs on a spec
 |---|---|---|---|
 | `name` | string | Yes | Verb-noun pattern. Prefix with domain for namespace clarity: `WIN`, `EMAIL`, `CLOUD`, `RBA_RR`. |
 | `references` | object | Optional | `public` (numbered), `internal` (alpha). Same convention as TVMs. |
-| `metadata` | object | Yes | Schema: `mdr::2.1`. Same structure as TVM/DOM metadata. |
+| `metadata` | object | Yes | Schema: e.g. `mdr::2.1` — verify against live template. Same structure as TVM/DOM metadata. |
 | `description` | string | Yes | Structured prose. See description section below. |
 | `detection_model` | UUID | Yes | DOM UUID with `# DOM Name` inline comment. Verify UUID exists. |
 | `response` | object | Yes | Incident response metadata. See response section. |
@@ -81,7 +81,7 @@ Each key under `configurations` is a platform identifier. All are optional — a
 
 | Field | Notes |
 |---|---|
-| `schema` | `sentinel::2.4` (current). |
+| `schema` | e.g. `sentinel::2.4` — verify against live template. |
 | `status` | `PRODUCTION`, `DEVELOPMENT`, `DEPRECATED`. Required for deployment automation. |
 | `trigger.operator` / `trigger.threshold` | e.g. `GreaterThan` / `0`. Omit for NRT. |
 | `scheduling.frequency` / `scheduling.lookback` | Format `Xd\|h\|m`. Lookback >= frequency + ~5min ingestion buffer. Omit for NRT. |
@@ -101,7 +101,7 @@ Each key under `configurations` is a platform identifier. All are optional — a
 
 | Field | Notes |
 |---|---|
-| `schema` | `defender_for_endpoint::2.1` (current). |
+| `schema` | e.g. `defender_for_endpoint::2.1` — verify against live template. |
 | `status` | Lifecycle status. |
 | `scheduling` | Frequency enum. Engine manages lookback — do NOT add explicit `Timestamp` filters. |
 | `alert.title` / `alert.description` | Support `{{columnName}}` placeholders. |
@@ -117,7 +117,7 @@ Each key under `configurations` is a platform identifier. All are optional — a
 
 | Field | Notes |
 |---|---|
-| `schema` | `splunk::2.1` (current). |
+| `schema` | e.g. `splunk::2.1` — verify against live template. |
 | `status` | Lifecycle status. |
 | `threshold` | Integer, default 0. |
 | `throttling.fields` / `throttling.duration` | Dedup fields + suppression window. Choose fields that define alert uniqueness. |
@@ -134,7 +134,7 @@ Each key under `configurations` is a platform identifier. All are optional — a
 
 | Field | Notes |
 |---|---|
-| `schema` | `carbon_black_cloud::2.0`. |
+| `schema` | e.g. `carbon_black_cloud::2.0` — verify against live template. |
 | `status` | Lifecycle status. |
 | `watchlist` / `report` | Override default watchlist/report name. |
 | `tags[]` | Custom tags for taxonomy. |
@@ -148,6 +148,8 @@ Each key under `configurations` is a platform identifier. All are optional — a
 The `response.procedure` block is what analysts see when the rule fires. Quality here directly impacts mean-time-to-respond.
 
 ### Great procedure pattern
+
+> The `searches` block below uses KQL as an example — adapt the query language to the target platform.
 
 ```yaml
 procedure:
@@ -233,7 +235,7 @@ Avoid shipping vendor-specific artefacts your manifest does not advertise — ex
 | **Hardcoded org-specific macros without docs** | Document what macros resolve to, or use inline `let` variables |
 | **Risk scores without justification** | Document why `score: 5` vs `score: 10` |
 | **Missing entity/risk mappings** | Map at minimum: Account, IP, Host (Sentinel) or user/system risk objects (Splunk) |
-| **Schema version drift** | Use latest: `mdr::2.1`, `sentinel::2.4`, `splunk::2.1` |
+| **Schema version drift** | Always check the live template for the current schema version |
 | **Inline comment as sole DOM linkage** | Verify the `detection_model` UUID exists in the DOM library |
 | **Missing containment on High-severity rules** | High-severity rules must have containment guidance |
 | **Inconsistent query output columns** | Standardise output column names across rules for the same platform |
@@ -243,7 +245,7 @@ Avoid shipping vendor-specific artefacts your manifest does not advertise — ex
 ## Quality checklist
 
 - [ ] `name` uses verb-noun pattern with domain prefix.
-- [ ] `metadata.schema` is `mdr::2.1`.
+- [ ] `metadata.schema` matches the current live template version.
 - [ ] `detection_model` UUID verified against DOM library.
 - [ ] `description` uses three-section structure (Technical Details, Detection Criteria, Exclusion Criteria).
 - [ ] `response.alert_severity` calibrated: High = immediate, Medium = same-day, Low = RBA only.

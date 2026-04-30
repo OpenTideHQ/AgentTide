@@ -203,19 +203,19 @@ Client → HTTP(S) on port 5985 (HTTP) or 5986 (HTTPS)
 
 ---
 
-## 9. Telemetry mapping
+## 9. Telemetry sources per protocol
 
-> Table names below are Sentinel/Defender examples. Map to equivalent tables for your SIEM (e.g., Splunk CIM data models, CrowdStrike event types, Elastic ECS fields).
-
-| Protocol | Sentinel table (example) | Defender table (example) | Sysmon EID |
+| Protocol | Primary log source | Windows Event IDs | Sysmon EIDs |
 |---|---|---|---|
-| DNS | `DnsEvents`, `DnsInventory` | `DeviceNetworkEvents` | 22 (DNSQuery) |
-| TLS/HTTPS | `CommonSecurityLog` (proxy/firewall) | `DeviceNetworkEvents` | 3 (NetworkConnect) |
-| SMB | `SecurityEvent` (5140/5145) | `DeviceNetworkEvents`, `DeviceFileEvents` | 3, 11, 17/18 |
-| LDAP | `SecurityEvent` (1644 diagnostic) | `IdentityQueryEvents` | — |
-| RDP | `SecurityEvent` (4624 Type 10, 4778/4779) | `DeviceLogonEvents` | 3 (NetworkConnect) |
-| WinRM | `SecurityEvent` (4624 Type 3) | `DeviceLogonEvents`, `DeviceProcessEvents` | 3 |
-| SMTP | Mail gateway logs (M365: `OfficeActivity`, `EmailEvents`) | `EmailEvents` | — |
+| DNS | DNS server logs, DNS client logs, proxy/firewall logs | — | 22 (DNSQuery) |
+| TLS/HTTPS | Proxy/firewall logs, network tap/broker | — | 3 (NetworkConnect) |
+| SMB | Windows Security log, file audit logs | 5140 (share access), 5145 (detailed share) | 3, 11, 17/18 |
+| LDAP | Windows Security log (diagnostic logging) | 1644 (LDAP query, requires diagnostic flag) | — |
+| RDP | Windows Security log | 4624 Type 10, 4778/4779 (session reconnect) | 3 (NetworkConnect) |
+| WinRM | Windows Security log, PowerShell logs | 4624 Type 3, 4104 (ScriptBlock) | 3 |
+| SMTP | Mail gateway logs, mail transfer agent logs | — | — |
+
+> Map these log sources to your SIEM's tables/indexes. Consult the relevant platform skill (`microsoft-sentinel`, `splunk-spl-processing`, `crowdstrike-falcon`, etc.) for table names and ingestion specifics.
 
 ---
 

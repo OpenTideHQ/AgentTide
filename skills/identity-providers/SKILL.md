@@ -5,7 +5,7 @@ description: Cross-vendor identity mechanics for detection engineering — OAuth
 
 # Identity Providers — cross-vendor authentication mechanics
 
-This skill encodes how modern authentication protocols actually work at the level needed to detect abuse. It is vendor-neutral — specific platform telemetry lives in `entra-id-protection`, `okta-identity`, and `active-directory`.
+This skill encodes how modern authentication protocols actually work at the level needed to detect abuse. It is vendor-neutral — specific platform telemetry lives in `entra-id`, `okta-identity`, and `active-directory`.
 
 ---
 
@@ -190,20 +190,22 @@ User authenticates → enters 6-digit code from authenticator app
 
 ---
 
-## 7. Conditional Access evaluation
+## 7. Policy-based access evaluation
 
-Entra ID evaluates Conditional Access policies in this order:
+Modern IdPs enforce access decisions through policy engines that evaluate context at sign-in time. The concept is the same across vendors — only the implementation differs:
 
-```
-1. Session evaluation (is there an existing valid session?)
-2. User/group assignment (does the policy apply to this user?)
-3. Cloud app/action (does the policy apply to this app?)
-4. Conditions (device state, location, risk level, client app)
-5. Grant controls (MFA, compliant device, approved app)
-6. Session controls (sign-in frequency, persistent browser, app-enforced restrictions)
-```
+| IdP | Policy engine | Evaluation factors |
+|-----|--------------|--------------------|
+| Entra ID | Conditional Access | User/group, app, device state, location, risk level, grant controls (MFA, compliance) |
+| Okta | Authentication Policies + Global Session Policy | User/group, app, device trust, network zone, behaviour |
+| Google Workspace | Context-Aware Access | User/group, device, IP range, geo, device security posture |
 
-**Detection-relevant**: Conditional Access bypass attempts produce specific `ResultType` codes (`53000`-`53003`). Policy modifications that weaken controls are high-signal (`AuditLogs` with `OperationName` containing "conditional access").
+**Detection-relevant**: Policy bypass attempts and policy weakening are high-signal across all IdPs. Monitor for:
+- Access attempts blocked by policy (indicates probing or misconfiguration)
+- Policy modifications that remove MFA requirements or exclude privileged roles
+- Changes to trusted network/location definitions
+
+For Entra ID-specific Conditional Access evaluation order, `ResultType` codes, and `AuditLogs` operations, see the `entra-id` skill.
 
 ---
 
@@ -217,5 +219,5 @@ Entra ID evaluates Conditional Access policies in this order:
 - [ ] Token theft detection covers IP change, device change, and concurrent use.
 - [ ] SAML assertion forgery conditions understood (signing key compromise).
 - [ ] PRT theft detection correlates device ID with registered devices.
-- [ ] Conditional Access bypass attempts monitored via ResultType codes.
+- [ ] Policy-based access bypass attempts monitored (Conditional Access, Okta policies, etc.).
 - [ ] Cross-IdP correlation uses email/UPN as the join key.

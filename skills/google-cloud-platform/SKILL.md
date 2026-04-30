@@ -132,14 +132,113 @@ User → iam.serviceAccounts.getAccessToken → SA token → API calls as SA
 
 ---
 
-## 5. SIEM ingestion
+## 5. IAM privilege escalation paths
 
-| GCP source | Chronicle (YARA-L) | Sentinel table | Splunk sourcetype |
+GCP IAM misconfigurations enable privilege escalation through multiple vectors.
+
+### IAM policy manipulation
+
+| Escalation method | Required permission | `methodName` |
+|---|---|---|
+| Grant self Owner on project | `resourcemanager.projects.setIamPolicy` | `SetIamPolicy` |
+| Grant self roles on service account | `iam.serviceAccounts.setIamPolicy` | `SetIamPolicy` |
+| Create SA key for privileged SA | `iam.serviceAccountKeys.create` | `google.iam.admin.v1.CreateServiceAccountKey` |
+| Impersonate privileged SA | `iam.serviceAccounts.getAccessToken` | `google.iam.credentials.v1.GenerateAccessToken` |
+| Modify org policy to remove constraints | `orgpolicy.policy.set` | `google.orgpolicy.v2.OrgPolicy.CreatePolicy` |
+
+### Compute-based escalation
+
+| Escalation method | Mechanism | `methodName` |
+|---|---|---|
+| Set startup script on instance | Modify instance metadata | `compute.instances.setMetadata` |
+| SSH via OS Login with sudo | OS Login role grants root | `google.cloud.oslogin.v1.OsLoginService.ImportSshPublicKey` |
+| Create instance with privileged SA | Attach SA with broad roles | `compute.instances.create` |
+| Cloud Function with privileged SA | Deploy function using SA | `google.cloud.functions.v1.CreateFunction` |
+| Cloud Build with privileged SA | Submit build with SA | `google.devtools.cloudbuild.v1.CreateBuild` |
+
+### Cross-project escalation
+
+| Escalation method | Mechanism | Detection signal |
+|---|---|---|
+| SA in Project A has roles in Project B | Impersonate SA to access Project B | `resource.labels.project_id` != caller's project |
+| Shared VPC abuse | Access resources in host project via service project | Cross-project network access |
+| Cross-project `SetIamPolicy` | Grant self access in another project | `SetIamPolicy` with target in different project |
+
+---
+
+## 6. Organisation and folder-level attacks
+
+| Attack vector | `methodName` | Detection signal |
+|---|---|---|
+| **Org policy modification** | `google.orgpolicy.v2.OrgPolicy.CreatePolicy` | Constraint removed or weakened |
+| **Folder/project creation** | `google.cloud.resourcemanager.v3.Projects.CreateProject` | New project — potential shadow project |
+| **Org IAM policy change** | `SetIamPolicy` at org level | Org-wide privilege grant |
+| **Audit log sink deletion** | `google.logging.v2.DeleteSink` | Audit trail disruption |
+| **Log exclusion creation** | `google.logging.v2.UpdateSink` with exclusion filter | Selective log blindness |
+| **VPC Service Controls bypass** | `google.identity.accesscontextmanager.v1.UpdateServicePerimeter` | Perimeter weakened |
+
+---
+
+## 7. Container and serverless attacks
+
+### GKE (Google Kubernetes Engine)
+
+| Attack vector | Detection signal |
+|---|---|
+| Privileged pod deployment | Kubernetes audit logs — pod spec with `privileged: true` |
+| GKE admin credential access | `google.container.v1.GetServerConfig` / cluster credential access |
+| Workload identity abuse | SA token from GKE pod used for unexpected API calls |
+| Container image poisoning | `google.devtools.artifactregistry.v1.CreateDockerImage` |
+| Node pool with broad SA | `google.container.v1.CreateNodePool` with default SA |
+
+### Cloud Functions / Cloud Run
+
+| Attack vector | Detection signal |
+|---|---|
+| Function deployment with privileged SA | `google.cloud.functions.v1.CreateFunction` + SA with broad roles |
+| Cloud Run service with SA accessing secrets | `google.cloud.run.v2.CreateService` + subsequent Secret Manager access |
+| Pub/Sub trigger for persistence | `google.pubsub.v1.CreateSubscription` linked to function |
+| Cloud Scheduler for persistence | `google.cloud.scheduler.v1.CreateJob` triggering function |
+
+---
+
+## 8. Network and infrastructure attacks
+
+### VPC and network telemetry
+
+| Source | What it captures | Detection use |
+|---|---|---|
+| **VPC Flow Logs** | Network flow metadata (src/dst IP, port, protocol, bytes) | Lateral movement, C2 beaconing, exfiltration volume |
+| **Cloud DNS logs** | DNS queries from VPC | DNS tunnelling, DGA detection |
+| **Cloud Armor logs** | WAF decisions | Web application attacks |
+| **Firewall Rules Logging** | Firewall rule hits (allow/deny) | Network access patterns |
+
+### Network-level attack events
+
+| `methodName` | Detection signal |
+|---|---|
+| `compute.firewalls.insert` / `patch` (0.0.0.0/0 source) | Firewall opened to the internet |
+| `compute.networks.addPeering` | New VPC peering — lateral movement path |
+| `compute.routes.insert` | Route modification — traffic redirection |
+| `compute.forwardingRules.insert` | New forwarding rule — potential traffic interception |
+| `dns.changes.create` | DNS record modification — potential hijacking |
+
+---
+
+## 9. SIEM ingestion patterns
+
+> Table/index names are SIEM-specific. Consult your SIEM's GCP integration documentation for exact configurations.
+
+| GCP source | Telemetry type | Ingestion method | Notes |
 |---|---|---|---|
-| Admin Activity logs | UDM events (auto-ingested) | `GCPAuditLogs` (via Pub/Sub) | `google:gcp:pubsub:audit` |
-| Data Access logs | UDM events | `GCPAuditLogs` | `google:gcp:pubsub:audit` |
-| VPC Flow Logs | UDM events | Custom ingestion | `google:gcp:pubsub:flow` |
-| Security Command Center | UDM events | `GoogleCloudSCC` | `google:gcp:scc` |
+| Admin Activity logs | Control-plane audit log | Pub/Sub → SIEM, or native Chronicle ingestion | Always on — primary detection source |
+| Data Access logs | Data-plane audit log | Pub/Sub → SIEM, or native Chronicle ingestion | Must be explicitly enabled |
+| System Event logs | GCP-initiated system actions | Pub/Sub → SIEM | Always on |
+| Policy Denied logs | Access denied by VPC SC / org policies | Pub/Sub → SIEM | Always on |
+| VPC Flow Logs | Network flow metadata | Pub/Sub → SIEM | Must be enabled per subnet |
+| Security Command Center | Threat findings | Pub/Sub → SIEM, or SCC API | Pre-built threat detections |
+| Cloud DNS logs | DNS queries | Pub/Sub → SIEM | Must be enabled |
+| GKE audit logs | Kubernetes API server audit | Pub/Sub → SIEM | Must be enabled |
 
 ### Chronicle / Google SecOps
 
@@ -155,15 +254,21 @@ GCP audit logs are natively ingested into Chronicle and normalised to UDM (Unifi
 
 ---
 
-## 6. Quality checklist
+## 10. Quality checklist
 
 - [ ] Data Access logging requirement declared (not enabled by default).
 - [ ] `protoPayload.methodName` used as primary event filter.
-- [ ] `principalEmail` distinguished between user and service account.
-- [ ] Service account key creation monitored and minimised.
-- [ ] Cross-project access patterns documented.
+- [ ] `principalEmail` distinguished between user (`user:`) and service account (`serviceAccount:`).
+- [ ] Service account key creation monitored and minimised — prefer workload identity federation.
+- [ ] Cross-project access patterns documented — `resource.labels.project_id` != caller's project.
 - [ ] `allUsers` / `allAuthenticatedUsers` grants flagged as public access.
 - [ ] Metadata server (169.254.169.254) abuse considered for SSRF scenarios.
 - [ ] Log sink integrity monitored (deletion, exclusion addition).
-- [ ] Workload identity federation sources validated.
+- [ ] Workload identity federation sources validated — unexpected external IdPs flagged.
 - [ ] SIEM ingestion method documented (Pub/Sub, Chronicle native, etc.).
+- [ ] IAM privilege escalation paths monitored: `SetIamPolicy`, SA key creation, SA impersonation.
+- [ ] Organisation-level operations monitored: org policy changes, folder/project creation.
+- [ ] VPC Service Controls perimeter changes monitored.
+- [ ] GKE admin credential access and privileged pod deployment monitored.
+- [ ] Firewall rules allowing 0.0.0.0/0 source flagged.
+- [ ] Cloud Function/Cloud Run deployment with privileged SA monitored.

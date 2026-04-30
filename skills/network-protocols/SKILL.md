@@ -205,7 +205,9 @@ Client → HTTP(S) on port 5985 (HTTP) or 5986 (HTTPS)
 
 ## 9. Telemetry mapping
 
-| Protocol | Sentinel table | Defender table | Sysmon EID |
+> Table names below are Sentinel/Defender examples. Map to equivalent tables for your SIEM (e.g., Splunk CIM data models, CrowdStrike event types, Elastic ECS fields).
+
+| Protocol | Sentinel table (example) | Defender table (example) | Sysmon EID |
 |---|---|---|---|
 | DNS | `DnsEvents`, `DnsInventory` | `DeviceNetworkEvents` | 22 (DNSQuery) |
 | TLS/HTTPS | `CommonSecurityLog` (proxy/firewall) | `DeviceNetworkEvents` | 3 (NetworkConnect) |
@@ -213,7 +215,7 @@ Client → HTTP(S) on port 5985 (HTTP) or 5986 (HTTPS)
 | LDAP | `SecurityEvent` (1644 diagnostic) | `IdentityQueryEvents` | — |
 | RDP | `SecurityEvent` (4624 Type 10, 4778/4779) | `DeviceLogonEvents` | 3 (NetworkConnect) |
 | WinRM | `SecurityEvent` (4624 Type 3) | `DeviceLogonEvents`, `DeviceProcessEvents` | 3 |
-| SMTP | `OfficeActivity`, `EmailEvents` | `EmailEvents` | — |
+| SMTP | Mail gateway logs (M365: `OfficeActivity`, `EmailEvents`) | `EmailEvents` | — |
 
 ---
 

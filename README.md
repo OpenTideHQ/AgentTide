@@ -52,7 +52,7 @@ See the [full skills index in AGENTS.md](AGENTS.md#skills-index-agenttideskills)
 
 ### Unified `AGENTS.md`
 
-A single `AGENTS.md` file at the repository root provides cross-cutting instructions consumed by all agent runners — prime directives, OpenTide framework essentials, workflow guidelines, guardrails, and the skills index. No proprietary filename stubs to maintain.
+A single [`AGENTS.md`](https://agents.md/) file at the repository root provides cross-cutting instructions consumed by all agent runners — prime directives, OpenTide framework essentials, workflow guidelines, guardrails, and the skills index. `AGENTS.md` is an [open standard](https://agents.md/) for guiding coding agents, used by over 60k open-source projects and supported by Codex, Cursor, Claude Code, Gemini CLI, VS Code/Copilot, Amp, Windsurf, and many more. No proprietary filename stubs to maintain.
 
 ---
 
@@ -113,107 +113,24 @@ Useful when you want to contribute back to AgentTide or keep it as a standalone 
 
 Once the skills are in your project, most agents discover them automatically. Here are harness-specific details for the most popular tools:
 
-<details>
-<summary><strong>VS Code / GitHub Copilot</strong></summary>
-
-VS Code discovers skills from `.agents/skills/` by default. If you used any of the installation methods above, skills are available immediately in Agent mode.
-
-To also use the `AGENTS.md` as custom instructions:
-
-```jsonc
-// .vscode/settings.json
-{
-  "github.copilot.chat.codeGeneration.instructions": [
-    { "file": "AGENTS.md" }
-  ]
-}
-```
-
-Verify skills are loaded: open Copilot Chat in Agent mode and type `/skills` to list discovered skills.
-
-📖 [VS Code Agent Skills docs](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
-
-</details>
+All major agents — **VS Code/Copilot**, **Cursor**, **Claude Code**, **Codex**, **Gemini CLI**, **Junie**, **Amp**, **Kiro**, and others — discover skills from `.agents/skills/` and read `AGENTS.md` from the project root automatically. If you used any of the installation methods above, **no extra configuration is needed**.
 
 <details>
-<summary><strong>Cursor</strong></summary>
+<summary><strong>Harness-specific documentation links</strong></summary>
 
-Cursor discovers skills from `skills/` and `.agents/skills/` directories in your project root.
+| Agent | Skills docs | Notes |
+|-------|------------|-------|
+| **VS Code / GitHub Copilot** | [Agent Skills](https://code.visualstudio.com/docs/copilot/customization/agent-skills) · [Custom instructions](https://code.visualstudio.com/docs/copilot/customization/custom-instructions) | Reads `.agents/skills/` and `AGENTS.md` automatically. Type `/skills` in Agent mode to verify. |
+| **Cursor** | [Skills](https://cursor.com/docs/context/skills) | Reads `.agents/skills/` and `AGENTS.md` automatically. |
+| **Claude Code** | [Skills](https://code.claude.com/docs/en/skills) | Reads `.agents/skills/`, `.claude/skills/`, and `AGENTS.md` automatically. |
+| **OpenAI Codex** | [Skills](https://developers.openai.com/codex/skills/) | Reads `AGENTS.md` automatically. |
+| **Gemini CLI** | [Skills](https://geminicli.com/docs/cli/skills/) | Reads `.agents/skills/` automatically. |
+| **Junie (JetBrains)** | [Skills](https://junie.jetbrains.com/docs/agent-skills.html) | Reads `.agents/skills/` automatically. |
+| **Amp** | [Skills](https://ampcode.com/manual#agent-skills) | Reads `AGENTS.md` automatically. |
+| **Roo Code** | [Skills](https://docs.roocode.com/features/skills) | Reads `.agents/skills/` automatically. |
+| **Kiro** | [Skills](https://kiro.dev/docs/skills/) | Reads `.agents/skills/` automatically. |
 
-To also load `AGENTS.md` as project-level rules, copy or symlink it into `.cursor/rules/`:
-
-```bash
-mkdir -p .cursor/rules
-cp AGENTS.md .cursor/rules/
-```
-
-📖 [Cursor Skills docs](https://cursor.com/docs/context/skills)
-
-</details>
-
-<details>
-<summary><strong>Claude Code</strong></summary>
-
-Claude Code discovers skills from `.claude/skills/` and `.agents/skills/`. It also reads `AGENTS.md` from the repository root automatically.
-
-If you used the submodule approach, add AgentTide as an additional directory so Claude Code discovers its skills:
-
-```bash
-# Option A: symlink skills into Claude Code's path
-ln -s .agents/AgentTide/skills .claude/skills
-
-# Option B: reference in CLAUDE.md
-echo "Read .agents/AgentTide/AGENTS.md for detection engineering instructions." >> CLAUDE.md
-```
-
-📖 [Claude Code Skills docs](https://code.claude.com/docs/en/skills)
-
-</details>
-
-<details>
-<summary><strong>OpenAI Codex</strong></summary>
-
-Codex reads `AGENTS.md` from the repository root and discovers skills in `agents/skills/` and `skills/` directories.
-
-If you used the submodule approach, symlink the key paths:
-
-```bash
-ln -s .agents/AgentTide/AGENTS.md AGENTS.md
-ln -s .agents/AgentTide/skills agents/skills
-```
-
-📖 [Codex Skills docs](https://developers.openai.com/codex/skills/)
-
-</details>
-
-<details>
-<summary><strong>Gemini CLI</strong></summary>
-
-Gemini CLI discovers skills from `.agents/skills/` in your project root — no extra configuration needed if you used Option 1, 2, or 3 above.
-
-📖 [Gemini CLI Skills docs](https://geminicli.com/docs/cli/skills/)
-
-</details>
-
-<details>
-<summary><strong>Junie (JetBrains)</strong></summary>
-
-Junie discovers Agent Skills from `.agents/skills/` in your project root automatically.
-
-📖 [Junie Skills docs](https://junie.jetbrains.com/docs/agent-skills.html)
-
-</details>
-
-<details>
-<summary><strong>Other compatible agents</strong></summary>
-
-The Agent Skills format is supported by a growing ecosystem of tools including [Goose](https://block.github.io/goose/), [Amp](https://ampcode.com/), [Roo Code](https://roocode.com/), [OpenHands](https://openhands.dev/), [Kiro](https://kiro.dev/), [OpenCode](https://opencode.ai/), and [many more](https://agentskills.io/clients).
-
-The general pattern is:
-
-1. Place skills in `.agents/skills/` (the cross-harness default) or the agent's preferred path.
-2. If the agent reads `AGENTS.md`, place or symlink it at the project root.
-3. Skills are discovered automatically — no further configuration required.
+For the full ecosystem of compatible agents, see the [Agent Skills client showcase](https://agentskills.io/clients).
 
 </details>
 

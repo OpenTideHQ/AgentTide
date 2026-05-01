@@ -26,7 +26,7 @@ CBC's primary detection authoring surface is **Watchlists** (curated collections
 
 ## 2. Process search query syntax
 
-CBC search syntax is its own DSL — not Lucene, not KQL, not SPL. Field-level filters with boolean operators:
+CBC search syntax is Lucene-based (Solr under the hood). Field-level filters with boolean operators:
 
 ```
 process_name:powershell.exe AND process_cmdline:*-EncodedCommand*
@@ -45,19 +45,72 @@ device_os:WINDOWS AND netconn_action:ACTION_CONNECTION_CREATE
 | `field:[a TO b]` | Range |
 | `()` | Grouping |
 
-**Common fields** (process search):
+**Process fields**:
 
 | Field | Description |
 |---|---|
-| `process_name`, `process_cmdline`, `process_hash` | Target process |
-| `parent_name`, `parent_cmdline`, `parent_hash` | Parent process |
-| `process_username`, `process_integrity_level` | Identity / privilege |
-| `device_name`, `device_os`, `device_policy` | Host context |
-| `netconn_*`, `filemod_*`, `regmod_*`, `crossproc_*` | Behaviour scopes |
-| `process_effective_reputation` | CBC reputation classification |
-| `alert_category`, `ttp` | Alert / TTP enrichment |
+| `process_name` | Executable name (lowercase path) |
+| `process_cmdline` | Full command line |
+| `process_hash` | SHA256 and MD5 hashes (array) |
+| `process_guid` | Stable per-process identifier (primary correlation key) |
+| `process_pid` | Process ID (array — may recycle) |
+| `process_username` | User context |
+| `process_original_filename` | PE original filename (anti-rename detection) |
+| `process_effective_reputation` | CBC reputation: `TRUSTED_WHITE_LIST`, `LOCAL_WHITE`, `NOT_LISTED`, `KNOWN_MALWARE`, `SUSPECT_MALWARE`, `PUP`, `ADAPTIVE_WHITE_LIST`, `COMPANY_BLACK_LIST` |
+| `process_elevated` | Boolean — running with elevated privileges |
+| `process_integrity_level` | `SYSTEM`, `HIGH`, `MEDIUM`, `LOW` |
+| `process_company_name` | PE company name metadata |
+| `process_internal_name` | PE internal name |
+| `process_service_name` | Windows service name (if applicable) |
+| `process_start_time` | ISO 8601 process start timestamp |
 
-**Time scope** is set via the search interface time picker, not inline.
+**Parent fields**: `parent_name`, `parent_cmdline`, `parent_hash`, `parent_guid`, `parent_pid`, `parent_reputation`, `parent_effective_reputation`
+
+**Device fields**: `device_name`, `device_id`, `device_os` (`WINDOWS`/`LINUX`/`MAC`), `device_policy`, `device_policy_id`, `device_external_ip`, `device_internal_ip`, `device_sensor_version`, `device_target_priority`, `device_location`
+
+**Event count fields** (per-process aggregates): `childproc_count`, `crossproc_count`, `filemod_count`, `modload_count`, `netconn_count`, `regmod_count`, `scriptload_count`
+
+**Time scope**: Set via `time_range` in API (`window: "-2w"`, or `start`/`end` ISO 8601), or via the search interface time picker.
+
+### Event type taxonomy
+
+Each process has associated events of specific types:
+
+| Event type | Key fields | Detection use |
+|---|---|---|
+| `childproc` | `childproc_name`, `childproc_cmdline`, `childproc_guid` | Process spawning chains |
+| `crossproc` | `crossproc_name`, `crossproc_action` (`ACTION_OPEN_PROCESS_HANDLE`) | Process injection, LSASS access |
+| `filemod` | `filemod_name`, `filemod_action` | File creation/modification/deletion |
+| `modload` | `modload_name`, `modload_md5`, `modload_sha256` | DLL loading, side-loading |
+| `netconn` | `netconn_action`, `netconn_remote_ipv4`, `netconn_remote_port`, `netconn_protocol`, `netconn_local_port`, `netconn_inbound` | C2, lateral movement, exfiltration |
+| `regmod` | `regmod_name`, `regmod_action` | Registry persistence, configuration changes |
+| `scriptload` | `scriptload_name`, `scriptload_content`, `fileless_scriptload_cmdline` | Script execution, AMSI content |
+
+### Critical query patterns
+
+**Enriched event exclusion**: Append `-enriched:true` to watchlist IOC queries to avoid duplicate hits from enriched events.
+
+```
+process_name:powershell.exe AND process_cmdline:*-EncodedCommand* -enriched:true
+```
+
+**Renamed binary detection**: Use `process_original_filename` to catch renamed executables:
+
+```
+!process_name:sethc.exe AND process_original_filename:sethc.exe
+```
+
+**Event count thresholds**: Filter processes by activity volume:
+
+```
+process_name:wscript.exe AND netconn_count:[1 TO *]
+```
+
+**Reputation filtering**: Focus on unknown or untrusted binaries:
+
+```
+process_effective_reputation:NOT_LISTED AND netconn_count:[1 TO *]
+```
 
 ---
 
@@ -169,7 +222,25 @@ Same authoring discipline as CrowdStrike RTR: read-only first, document intent b
 
 ---
 
-## 9. Entity identifier alignment
+## 9. SIEM ingestion patterns
+
+> Table/index names are SIEM-specific. Consult your SIEM's CBC integration documentation for exact configurations.
+
+| CBC source | Telemetry type | Ingestion method | Notes |
+|---|---|---|---|
+| Alerts | Detection alerts (watchlist hits, NGAV, threat intel) | Data Forwarder → S3/Azure Blob → SIEM, or API polling | Primary alert source |
+| Process events | Process creation, command-line, parent chain | Data Forwarder → S3/Azure Blob → SIEM | Requires Enterprise EDR |
+| Network events | Connection metadata | Data Forwarder → S3/Azure Blob → SIEM | Requires Enterprise EDR |
+| File/registry events | File and registry modifications | Data Forwarder → S3/Azure Blob → SIEM | Requires Enterprise EDR |
+| Audit logs | Admin actions, policy changes | Audit Log API → SIEM | Always available |
+
+### Data Forwarder
+
+CBC's Data Forwarder exports event data to AWS S3 or Azure Blob Storage in JSON format. The SIEM then ingests from the storage bucket. This is the recommended method for bulk event ingestion — API polling has rate limits.
+
+---
+
+## 10. Entity identifier alignment
 
 | Concept | CBC | Microsoft Defender | Sentinel | CrowdStrike |
 |---|---|---|---|---|
@@ -182,7 +253,7 @@ Same authoring discipline as CrowdStrike RTR: read-only first, document intent b
 
 ---
 
-## 10. Mapping into OpenTide MDR
+## 11. Mapping into OpenTide MDR
 
 When CBC content lives in `configurations.carbon_black_cloud`:
 
@@ -193,7 +264,7 @@ When CBC content lives in `configurations.carbon_black_cloud`:
 
 ---
 
-## 11. Worked detection patterns
+## 12. Worked detection patterns
 
 ### LSASS credential dumping
 
@@ -228,6 +299,31 @@ process_name:schtasks.exe AND process_cmdline:*/create* AND process_cmdline:*App
 
 Watchlist Report: Severity 5, MITRE T1053.005. FP: some legitimate software creates tasks in AppData — check `process_effective_reputation`.
 
+### Accessibility feature hijack (renamed binary)
+
+```
+((!process_name:sethc.exe AND process_original_filename:sethc.exe)
+  OR (!process_name:utilman.exe AND process_original_filename:utilman.exe)
+  OR (!process_name:osk.exe AND process_original_filename:osk.exe)
+  OR (!process_name:Magnify.exe AND process_original_filename:Magnify.exe)
+  OR (!process_name:Narrator.exe AND process_original_filename:Narrator.exe))
+-enriched:true
+```
+
+Watchlist Report: Severity 8, MITRE T1546.008. FP: very rare — accessibility features should not be renamed.
+
+### Archive extraction from email/download path
+
+```
+process_name:7zFM.exe AND
+  (process_cmdline:*.iso OR process_cmdline:*.img OR process_cmdline:*.dmg) AND
+  (process_cmdline:*\\AppData\\Local\\Microsoft\\Windows\\INetCache\\Content.Outlook\\*
+   OR process_cmdline:*\\Downloads\\*)
+-enriched:true
+```
+
+Watchlist Report: Severity 5, MITRE T1204.002. FP: legitimate archive extraction — check file reputation and source.
+
 ### Outbound connection to rare port
 
 ```
@@ -242,14 +338,19 @@ Scheduled Search: common Metasploit/Meterpreter default port. Adjust port list p
 
 ---
 
-## 12. Quality checklist
+## 13. Quality checklist
 
 - [ ] Surface identified (Watchlist Report / Scheduled Search / IOC).
 - [ ] One TTP per Report.
-- [ ] Severity calibrated (high values reserved for paging-worthy).
+- [ ] Severity calibrated (8–10 for paging-worthy, 5–7 for behavioural, 1–4 for informational).
 - [ ] MITRE mapping in Report metadata + MDR description.
 - [ ] Process correlation via `process_guid`, not PID.
-- [ ] Sensor tier requirement declared.
+- [ ] Sensor tier requirement declared (Endpoint Standard vs Enterprise EDR).
+- [ ] `-enriched:true` appended to watchlist IOC queries to avoid duplicate hits.
+- [ ] `process_original_filename` used alongside `process_name` for renamed binary detection.
+- [ ] Event count thresholds used where appropriate (`netconn_count:[1 TO *]`).
 - [ ] Override patterns documented in Report description.
 - [ ] FP triage steps in description.
 - [ ] Live Response scripts reviewed before automation.
+- [ ] SIEM ingestion method documented (Data Forwarder vs API polling).
+- [ ] Reputation filtering considered (`process_effective_reputation:NOT_LISTED`).

@@ -1,13 +1,21 @@
 ---
-name: mitre-attack-mapping
-description: MITRE ATT&CK mapping discipline for OpenTide TVM, DOM, and MDR objects — technique vs sub-technique selection, tactic assignment, multi-technique chaining, version pinning, revocation handling, coverage gap analysis, and the inverse mapping from defensive capabilities to ATT&CK coverage. Use when populating threat.att&ck fields in TVMs, mapping DOM signals to techniques, tagging MDR rules, or assessing detection coverage against the ATT&CK matrix.
+name: mitre-attack
+description: MITRE ATT&CK mapping discipline and technique reference for OpenTide TVM, DOM, and MDR objects — technique vs sub-technique selection, tactic assignment, multi-technique chaining, version pinning, revocation handling, coverage gap analysis, platform matrix awareness, and a locally searchable technique index. Use when populating threat.att&ck fields in TVMs, mapping DOM signals to techniques, tagging MDR rules, assessing detection coverage against the ATT&CK matrix, or looking up technique IDs and descriptions.
 ---
 
-# MITRE ATT&CK mapping — OpenTide integration
+# MITRE ATT&CK — mapping discipline + technique reference
 
-This skill encodes the discipline of mapping adversary behaviour to ATT&CK and back. Every OpenTide object type carries ATT&CK references; getting them right is a quality gate. Current baseline: **ATT&CK v19** (April 2026, Enterprise domain: 15 tactics, 222 techniques, 475 sub-techniques).
+This skill encodes the discipline of mapping adversary behaviour to ATT&CK and back, plus a locally searchable technique index. Every OpenTide object type carries ATT&CK references; getting them right is a quality gate.
+
+**Current baseline**: ATT&CK **v19** (April 2026, Enterprise domain: 15 tactics, 222 techniques, 475 sub-techniques).
 
 > **v19 breaking change**: Defense Evasion was split into **Stealth** (TA0005) and **Defense Impairment** (TA0112). Any existing mappings referencing TA0005 as "Defense Evasion" must be reviewed and re-assigned.
+
+> **Online version check**: If this skill may be outdated, verify the current ATT&CK version at:
+> - Release notes: https://attack.mitre.org/resources/updates/
+> - Version history: https://attack.mitre.org/versions/
+> - Machine-readable STIX: https://github.com/mitre/cti (enterprise-attack branch)
+> - Blog announcements: https://medium.com/mitre-attack
 
 ---
 
@@ -159,22 +167,65 @@ ATT&CK mapping also works in reverse: given a set of detection rules, which tech
 
 ## 8. ATT&CK data sources and data components
 
-ATT&CK v19 includes **Data Components** (e.g. Process Creation, File Modification, Network Connection Creation) that link techniques to observable telemetry. Use these to validate that your detection platform actually has visibility into the mapped technique:
+ATT&CK v19 includes **Data Components** (e.g. Process Creation, File Modification, Network Connection Creation) that link techniques to observable telemetry. Use these to validate that your detection platform actually has visibility into the mapped technique.
 
-| Data component | Sentinel table | Defender table |
+| Data component | Telemetry type | Example sources |
 |---|---|---|
-| Process Creation | `SecurityEvent` (4688) | `DeviceProcessEvents` |
-| File Creation | `SecurityEvent` (4663) | `DeviceFileEvents` |
-| Network Connection Creation | `CommonSecurityLog` | `DeviceNetworkEvents` |
-| User Account Authentication | `SigninLogs` | `DeviceLogonEvents` |
-| Windows Registry Key Modification | `SecurityEvent` (4657) | `DeviceRegistryEvents` |
-| Module Load | — | `DeviceImageLoadEvents` |
+| Process Creation | Process execution logs | EDR process events, Security EID 4688, Sysmon EID 1 |
+| File Creation / Modification | File system activity logs | EDR file events, Sysmon EID 11, Security EID 4663 |
+| Network Connection Creation | Network connection logs | EDR network events, Sysmon EID 3, firewall logs |
+| User Account Authentication | Authentication logs | SIEM sign-in logs, Security EID 4624/4625 |
+| Windows Registry Key Modification | Registry change logs | EDR registry events, Sysmon EID 12/13/14, Security EID 4657 |
+| Module Load | DLL/image load logs | EDR image load events, Sysmon EID 7 |
+| Command Execution | Command-line / script logs | PowerShell 4104, EDR command events |
+| Scheduled Job Creation | Task/job creation logs | Security EID 4698, Sysmon EID (via WMI), cron logs |
+| Service Creation | Service installation logs | System EID 7045, Security EID 4697 |
+| Active Directory Object Access | Directory service logs | SIEM audit logs, Security EID 4662 |
 
-If the data component required by a technique is not available on your platform, the mapping is theoretical — document the gap.
+> Consult your platform skill for exact table/index names. If the data component required by a technique is not available on your platform, the mapping is theoretical — document the gap.
 
 ---
 
-## 9. Quality checklist
+## 9. Platform matrix awareness
+
+ATT&CK Enterprise covers multiple platform domains. Ensure technique mappings align with the target platform:
+
+| Platform | Scope | Notes |
+|---|---|---|
+| **Windows** | Desktop + Server | Largest technique coverage; most sub-techniques |
+| **Linux** | Servers, containers, IoT | Growing coverage; includes container-specific techniques |
+| **macOS** | Desktop | Smaller but distinct technique set (TCC, launchd, etc.) |
+| **Cloud** (AWS, Azure, GCP) | IaaS / PaaS | Cloud-specific techniques (T1578, T1580, T1535, etc.) |
+| **SaaS** | Office 365, Google Workspace, etc. | Identity and data-focused techniques |
+| **Network** | Routers, switches, firewalls | Network device-specific techniques |
+| **Containers** | Docker, Kubernetes | Container escape, orchestration abuse |
+| **ICS** | Industrial control systems | Separate ATT&CK for ICS matrix (not covered here) |
+
+**Rule**: When mapping a detection rule to a technique, verify the technique applies to the platform the rule targets. A Windows-only detection cannot claim coverage of a Linux-only technique.
+
+---
+
+## 10. Tactic reference (v19 Enterprise)
+
+| ID | Tactic | Description |
+|---|---|---|
+| TA0043 | Reconnaissance | Gathering information to plan future operations |
+| TA0042 | Resource Development | Establishing resources to support operations |
+| TA0001 | Initial Access | Gaining an initial foothold |
+| TA0002 | Execution | Running adversary-controlled code |
+| TA0003 | Persistence | Maintaining access across restarts/credential changes |
+| TA0004 | Privilege Escalation | Gaining higher-level permissions |
+| TA0005 | Stealth | Hiding artefacts, obfuscation, masquerading (v19: split from Defense Evasion) |
+| TA0112 | Defense Impairment | Disabling tools, clearing logs, firewall modification (v19: split from Defense Evasion) |
+| TA0006 | Credential Access | Stealing credentials |
+| TA0007 | Discovery | Exploring the environment |
+| TA0008 | Lateral Movement | Moving through the environment |
+| TA0009 | Collection | Gathering data of interest |
+| TA0011 | Command and Control | Communicating with compromised systems |
+| TA0010 | Exfiltration | Stealing data |
+| TA0040 | Impact | Manipulating, interrupting, or destroying systems and data |
+
+## 11. Quality checklist
 
 - [ ] Every technique ID is valid in the current ATT&CK version.
 - [ ] Sub-technique used when the specific implementation is documented; parent when not.
@@ -184,5 +235,9 @@ If the data component required by a technique is not available on your platform,
 - [ ] DOM signal mapping covers only the techniques the signal can observe.
 - [ ] TVM technique mapping traces to specific source intelligence claims.
 - [ ] No revoked or deprecated technique IDs remain.
-- [ ] Coverage claims validated against available data sources.
+- [ ] Coverage claims validated against available data sources / data components.
 - [ ] Multi-technique chains are independently evidenced per step.
+- [ ] Platform matrix alignment verified (technique applies to the target platform).
+- [ ] v19 tactic split handled: TA0005 = Stealth, TA0112 = Defense Impairment (not "Defense Evasion").
+- [ ] Technique index (`references/Enterprise-Techniques.md`) consulted for ID validation.
+- [ ] Online ATT&CK version checked if skill may be outdated.

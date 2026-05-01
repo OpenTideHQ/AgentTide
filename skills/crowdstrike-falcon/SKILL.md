@@ -1,6 +1,6 @@
 ---
 name: crowdstrike-falcon
-description: CrowdStrike Falcon deployment guidance for OpenTide configurations.crowdstrike blocks — distinguishes Falcon Insight (Event Search / EAM) from Falcon Next-Gen SIEM (LogScale / CQL), covers Falcon Query Language idioms, custom IOA / IOC discipline, scheduled search lifecycle, Falcon Fusion workflow automation, sensor coverage gaps across Windows / macOS / Linux, real-time response guardrails, and entity-identifier alignment for cross-platform incident correlation. Use when authoring or reviewing CrowdStrike-keyed configurations in OpenTide MDR objects.
+description: CrowdStrike Falcon detection engineering — distinguishes Falcon Insight (Event Search / EAM) from Falcon Next-Gen SIEM (LogScale / CQL), covers Falcon Query Language idioms, Custom IOA / IOC discipline, Correlation Rules (detection-as-code), Falcon Fusion workflow automation, sensor coverage gaps across Windows / macOS / Linux, SIEM ingestion patterns, real-time response guardrails, and entity-identifier alignment for cross-platform correlation. Distilled from CrowdStrike/falconpy SDK samples and API documentation. Use when authoring or reviewing CrowdStrike-keyed configurations in OpenTide MDR objects.
 ---
 
 # CrowdStrike Falcon — content authoring
@@ -16,8 +16,8 @@ This skill encodes operational context for authoring detection content destined 
 | **Falcon Insight — Event Search** | Falcon Query Language (FQL) | Ad-hoc hunting, scheduled searches; original EAM data store |
 | **Falcon Insight — Custom IOAs** | IOA rule-builder (UI-driven, condition tree) | Real-time behavioural detection on the sensor |
 | **Falcon Insight — Custom IOCs** | Indicator API (hash, IP, domain) | Block / detect-only on observable atoms |
+| **Falcon Correlation Rules** | FQL/CQL filter (JSON-defined) | Detection-as-code: scheduled queries with alert generation |
 | **Falcon Next-Gen SIEM (NG-SIEM, ex-Humio / LogScale)** | LogScale Query Language (CQL) | Log search, dashboards, scheduled queries; multi-source ingestion |
-| **Falcon Fusion (workflows)** | YAML / UI workflow definitions | Automated response orchestration |
 | **Falcon Real-Time Response (RTR)** | RTR command set (limited shell) | Manual or automated response actions |
 
 Confirm which surface the content targets before authoring. The same intent (e.g. "alert on suspicious PowerShell") looks very different as an IOA, an Event Search scheduled query, an NG-SIEM correlation rule, or a Fusion workflow.
@@ -73,6 +73,20 @@ event_simpleName=DnsRequest DomainName=*.evil.example
 
 Use `ContextProcessId_decimal` (not OS-level PID) to correlate parent → child events. PIDs recycle; Falcon's context ID is stable per process instance.
 
+Falcon provides **three-generation process chain** visibility:
+
+| Field | Description |
+|---|---|
+| `ImageFileName` / `FileName` | Current process |
+| `ParentBaseFileName` / `ParentCommandLine` | Parent process |
+| `GrandparentBaseFileName` / `GrandparentCommandLine` | Grandparent process |
+
+This enables detection of multi-step chains (e.g., `winword.exe → cmd.exe → powershell.exe`) in a single query without joins.
+
+### Storyline ID correlation
+
+Falcon groups related events into **Storylines** — a logical grouping of events that represent a single attack chain. The `StorylineId` field links events across process boundaries within the same incident context. Use Storyline IDs for incident-level correlation rather than individual process correlation.
+
 ---
 
 ## 4. Custom IOAs
@@ -119,7 +133,58 @@ Custom IOCs are atomic indicator matches (SHA256, MD5, IPv4/v6, domain). The Fal
 
 ---
 
-## 6. Falcon Next-Gen SIEM (LogScale / CQL)
+## 6. Correlation Rules (detection-as-code)
+
+Correlation Rules are CrowdStrike's detection-as-code surface — JSON-defined scheduled queries that generate detections.
+
+### Rule structure
+
+```json
+{
+  "name": "Suspicious PowerShell Encoded Command",
+  "severity": 50,
+  "search": {
+    "filter": "event_simpleName=ProcessRollup2 ImageFileName=*\\powershell.exe CommandLine=*-EncodedCommand*",
+    "outcome": "detection",
+    "lookback": "75m",
+    "trigger_mode": "summary"
+  },
+  "operation": {
+    "schedule": {
+      "definition": "@every 1h"
+    }
+  },
+  "status": "active"
+}
+```
+
+| Field | Description |
+|---|---|
+| `name` | Detection rule name |
+| `severity` | 0–100 (maps to informational/low/medium/high/critical) |
+| `search.filter` | FQL or CQL query |
+| `search.outcome` | `detection` (generates alert) |
+| `search.lookback` | Time window (e.g., `75m`, `24h`) |
+| `search.trigger_mode` | `summary` (aggregate) or per-event |
+| `operation.schedule.definition` | Cron-like schedule (`@every 1h`, `@every 15m`) |
+| `status` | `active` / `inactive` |
+
+### Management via API
+
+Correlation Rules can be managed as code using the FalconPy SDK:
+- **Sync**: Export rules to JSON, version-control in Git, deploy via CI/CD
+- **Create/Update/Delete**: API-driven lifecycle
+- See `CrowdStrike/falconpy/samples/correlation_rules/detection_as_code/` for reference implementation
+
+### Authoring discipline
+
+- **Lookback must exceed schedule interval** — a rule running `@every 1h` with `lookback: 75m` ensures 15-minute overlap to avoid gaps.
+- **Start with `trigger_mode: summary`** — per-event mode can generate massive alert volume.
+- **Severity calibration**: 0–20 informational, 21–40 low, 41–60 medium, 61–80 high, 81–100 critical.
+
+---
+
+## 7. Falcon Next-Gen SIEM (LogScale / CQL)
 
 NG-SIEM is the evolved Humio / LogScale surface. CQL is **not** FQL — it is closer to SPL conceptually but with its own syntax.
 
@@ -139,6 +204,35 @@ NG-SIEM is the evolved Humio / LogScale surface. CQL is **not** FQL — it is cl
 | `| timeChart(...)` | Time bucketing |
 | `| join(...)` | Cross-repo joining |
 
+### Worked CQL examples
+
+**Encoded PowerShell detection**:
+```cql
+#repo=falcon_data event_simpleName=ProcessRollup2
+| ImageFileName=/\\powershell\.exe$/i
+| CommandLine=/-(enc|encodedcommand)/i
+| groupBy([ComputerName, UserName, CommandLine], function=count())
+```
+
+**DNS beaconing detection**:
+```cql
+#repo=falcon_data event_simpleName=DnsRequest
+| groupBy([aid, DomainName], function=[count(), min(@timestamp), max(@timestamp)])
+| _count > 100
+| timeDelta := _max - _min
+| interval := timeDelta / _count
+| cv := stddev(interval) / avg(interval)
+| cv < 0.2
+```
+
+**Failed logon spike**:
+```cql
+#repo=falcon_data event_simpleName=UserLogonFailed
+| bucket(field=@timestamp, span=5m)
+| groupBy([ComputerName, _bucket], function=count())
+| _count > 20
+```
+
 ### Scheduled queries and alerts
 
 - **Schedule discipline**: aligned to sensor data ingestion cadence; respect query budget per tenant.
@@ -147,7 +241,7 @@ NG-SIEM is the evolved Humio / LogScale surface. CQL is **not** FQL — it is cl
 
 ---
 
-## 7. Falcon Fusion workflows
+## 8. Falcon Fusion workflows
 
 Fusion is the orchestration layer — the analogue to Sentinel Logic Apps or SOAR playbooks.
 
@@ -168,7 +262,7 @@ Fusion is the orchestration layer — the analogue to Sentinel Logic Apps or SOA
 
 ---
 
-## 8. Real-Time Response
+## 9. Real-Time Response
 
 RTR is a constrained shell that runs through the sensor for incident response. Commands are categorised:
 
@@ -185,7 +279,25 @@ RTR is a constrained shell that runs through the sensor for incident response. C
 
 ---
 
-## 9. Entity identifier alignment (cross-platform correlation)
+## 10. SIEM ingestion patterns
+
+> Table/index names are SIEM-specific. Consult your SIEM's CrowdStrike integration documentation for exact configurations.
+
+| Falcon source | Telemetry type | Ingestion method | Notes |
+|---|---|---|---|
+| Event data (EAM) | Process, network, file, registry, DNS events | Data Replicator (S3) or SIEM connector | Primary telemetry source |
+| Detections / Alerts | Detection alerts (IOA, watchlist, correlation) | Streaming API or SIEM connector | Alert-level data |
+| Incidents | Grouped detections | Streaming API or SIEM connector | Incident-level aggregation |
+| NG-SIEM (LogScale) | Multi-source log data | Native LogScale ingestion | CQL queries run natively |
+| Audit logs | Admin actions, policy changes | API polling | Always available |
+
+### Data Replicator
+
+Falcon's Data Replicator streams raw event data to AWS S3 in near-real-time. This is the recommended method for bulk event ingestion into external SIEMs. The Streaming API provides a webhook-style alternative for lower-volume, lower-latency use cases.
+
+---
+
+## 11. Entity identifier alignment (cross-platform correlation)
 
 When OpenTide MDR objects bridge Falcon detections with Microsoft / Splunk equivalents, ensure identifier columns align:
 
@@ -201,7 +313,7 @@ Correlation **must happen at the analyst / orchestrator layer** (Fusion, SIEM, o
 
 ---
 
-## 10. Mapping into OpenTide MDR
+## 12. Mapping into OpenTide MDR
 
 When Falcon content lives in `configurations.crowdstrike` blocks:
 
@@ -212,20 +324,26 @@ When Falcon content lives in `configurations.crowdstrike` blocks:
 
 ---
 
-## 11. Quality checklist
+## 13. Quality checklist
 
-- [ ] Surface identified (FQL Event Search vs CQL NG-SIEM vs IOA vs IOC vs Fusion).
+- [ ] Surface identified (FQL Event Search / CQL NG-SIEM / Custom IOA / Custom IOC / Correlation Rule / Fusion).
+- [ ] `event_simpleName=` present in every FQL query.
 - [ ] Sensor coverage gaps declared per OS in `description`.
 - [ ] IOAs staged in Detect mode before Prevent.
 - [ ] IOCs carry `expiration` and source provenance.
 - [ ] CQL repo (`#repo=`) and time scope set.
 - [ ] FQL queries pivot via `ContextProcessId_decimal`, not OS PID.
+- [ ] Three-generation process chain (`GrandparentBaseFileName`) used where applicable.
+- [ ] Correlation Rules: lookback exceeds schedule interval; trigger_mode deliberate.
+- [ ] Correlation Rules: severity calibrated (0–100 scale).
 - [ ] Fusion workflows reviewed for destructive actions; auto-containment guarded.
 - [ ] RTR scripts authored manually before automation.
 - [ ] Entity identifiers documented for cross-platform correlation.
+- [ ] SIEM ingestion method documented (Data Replicator vs Streaming API vs SIEM connector).
+- [ ] StorylineId used for incident-level correlation where applicable.
 
 ---
 
-## 12. Reference catalogues
+## 14. Reference catalogues
 
 - `references/FQL-Field-Reference.md` — FQL event types, field names by category (process, network, DNS, file, registry, auth), CQL differences, and Custom IOA field mapping.

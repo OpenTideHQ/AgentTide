@@ -1,6 +1,6 @@
 ---
 name: harfanglab
-description: HarfangLab orb / EDR authoring guidance — Sigma rule pack ingestion, RHQL hunt query language, custom detection rules, telemetry policies, exclusions and whitelists, sensor capability map across Windows / macOS / Linux, threat intelligence integration, and entity-identifier alignment. Use for harfanglab-keyed configurations in OpenTide MDR objects.
+description: HarfangLab orb / EDR detection engineering — Sigma rule authoring in CoreTide's validated YAML schema (selections array, modifiers, conditional field validation), RHQL hunt query language, YARA file/memory scanning (CoreTide structure with imports, meta.context, auto-routing), full logsource category catalogue (39 Windows, 12 Linux, 6 macOS), 21 Sigma modifiers, maturity/confidence/action lifecycle, exclusion discipline, and SIEM ingestion patterns. Distilled from CoreTide HarfangLab sub-schema and SigmaHQ (3132 rules). Use for harfanglab-keyed configurations in OpenTide MDR objects.
 ---
 
 # HarfangLab orb (EDR) — content authoring
@@ -24,81 +24,136 @@ The primary detection-authoring surface is **Sigma**. HarfangLab's posture leans
 
 ---
 
-## 2. Sigma rules — discipline
+## 2. Sigma rules — CoreTide schema format
 
-Sigma is a portable detection format. HarfangLab consumes both:
+HarfangLab consumes Sigma-based detection rules. In OpenTide, these are authored using the **CoreTide HarfangLab sub-schema** — an improved, fully validated YAML format that deviates from standard Sigma in key ways.
 
-- **Vendor-curated** Sigma rule packs (subscribed and updated centrally).
-- **Customer-authored** Sigma rules deployed per tenant.
+### CoreTide vs standard Sigma — key differences
 
-### Standard Sigma sections
+| Aspect | Standard Sigma | CoreTide HarfangLab schema |
+|---|---|---|
+| Detection block | Named YAML maps (`detection: selection: ...`) | `selections` array of `{name, field, modifiers, value}` objects |
+| Field validation | None — any string accepted | **Conditional enums** — fields validated per product+category |
+| Modifiers | Pipe syntax (`Image\|endswith`) | `modifiers` array on each selection object |
+| Maturity | `status` (experimental/test/stable) | `maturity` (Experimental/Testing/Stable) + `confidence` (Weak/Moderate/Strong) |
+| Action | `level` (informational/low/medium/high/critical) | `action` (Alert / Alert & Block / Alert, Block & Quarantine) |
+| Schema version | None | `schema: harfanglab::1.0` |
+
+### CoreTide Sigma rule structure
 
 ```yaml
-title: Suspicious encoded PowerShell execution
-id: <UUIDv4>
-status: experimental | test | stable
-description: Detects PowerShell with -EncodedCommand parameter typical of loaders.
-references:
-  - <source URL>
-author: <author>
-date: <YYYY/MM/DD>
-modified: <YYYY/MM/DD>
-tags:
-  - attack.execution
-  - attack.t1059.001
-logsource:
-  product: windows
-  category: process_creation
-detection:
-  selection:
-    Image|endswith:
-      - '\powershell.exe'
-      - '\pwsh.exe'
-    CommandLine|contains:
-      - '-EncodedCommand'
-      - '-enc '
-  filter_legitimate:
-    ParentImage|endswith:
-      - '\sccm\ccmexec.exe'
-  condition: selection and not filter_legitimate
-falsepositives:
-  - Legitimate enterprise software-deployment tooling
-level: high
+harfanglab:
+  schema: harfanglab::1.0
+  status: PRODUCTION
+  maturity: Stable
+  confidence: Strong
+  action: Alert
+  tags:
+    - attack.execution
+    - attack.t1059.001
+
+  sigma:
+    logsource:
+      product: windows
+      category: process_creation
+    selections:
+      - name: ProcessMatch
+        field: Image
+        modifiers:
+          - endswith
+        value:
+          - '\powershell.exe'
+          - '\pwsh.exe'
+      - name: CommandLineMatch
+        field: CommandLine
+        modifiers:
+          - contains
+        value:
+          - '-EncodedCommand'
+          - '-enc '
+      - name: FilterLegitimate
+        field: ParentImage
+        modifiers:
+          - endswith
+        value:
+          - '\ccmexec.exe'
+    condition: (ProcessMatch and CommandLineMatch) and not FilterLegitimate
+    false_positives:
+      - Legitimate enterprise software-deployment tooling
 ```
 
-### Authoring discipline
+### Maturity / confidence / action lifecycle
 
-- **`logsource` accuracy**: HarfangLab routes Sigma rules to the right telemetry by `product` / `category` / `service`. Wrong logsource = rule never fires.
-- **Modifiers**: use `|endswith`, `|contains`, `|startswith`, `|re` deliberately. Avoid loose `|contains` on high-volume fields (`CommandLine`).
-- **`filter_*` blocks**: name FP filters explicitly (`filter_legitimate`, `filter_signed`, etc.) and reference them in `condition`.
-- **`level`** maps to severity — calibrate against the SOC's alert-volume budget.
-- **`tags`**: ATT&CK technique IDs (`attack.t1059.001`), TLP, and any internal taxonomy.
-- **`falsepositives`**: list known FP scenarios; surfaced to analysts.
-- **`status: experimental`** until validated on production telemetry.
+| Field | Values | Maps to |
+|---|---|---|
+| `maturity` | Experimental → Testing → Stable | HarfangLab `hl_status` |
+| `confidence` | Weak → Moderate → Strong | HarfangLab `rule_confidence_override` |
+| `action` | Alert / Alert & Block / Alert, Block & Quarantine | HarfangLab `global_state` |
 
-### HarfangLab-specific Sigma extensions
+**Rule**: New rules start at `maturity: Experimental`, `confidence: Weak`, `action: Alert`. Promote only after production validation.
 
-- Some HarfangLab telemetry fields don't map 1:1 to canonical Sigma field names. Cross-reference the mapping table below before assuming a Sigma field exists.
-- Custom logsources for HarfangLab-specific telemetry channels.
+### Modifier catalogue (21 modifiers)
 
-### Sigma logsource mapping for HarfangLab
+| Modifier | Purpose | Example |
+|---|---|---|
+| `contains` | Substring match | `CommandLine` contains `-enc` |
+| `startswith` | Prefix match | `Image` starts with `C:\Windows\` |
+| `endswith` | Suffix match | `Image` ends with `\powershell.exe` |
+| `re` | Regular expression | `CommandLine` matches regex pattern |
+| `cased` | Case-sensitive (default is case-insensitive) | Exact case match |
+| `all` | All values must match (AND instead of default OR) | All strings present |
+| `cidr` | CIDR IP range match | `DestinationIp` in `10.0.0.0/8` |
+| `base64` | Base64-encode value before matching | Detect encoded strings |
+| `base64offset` | Base64 with all 3 offset variants | Catch any alignment |
+| `wide` | UTF-16LE encoding (alias for `utf16le`) | Wide string matching |
+| `utf16` / `utf16le` / `utf16be` | Unicode encoding variants | Encoded string detection |
+| `windash` | Windows dash variants (`-`, `/`, `–`, `—`, `―`) | Catch all dash styles |
+| `exists` | Check field existence (value: true/false) | Field presence check |
+| `fieldref` | Reference another field's value | Cross-field comparison |
+| `expand` | Expand placeholder values | Pipeline integration |
+| `gt` / `gte` / `lt` / `lte` | Numeric comparisons | Threshold detection |
 
-| Sigma `product` | Sigma `category` | HarfangLab telemetry | Notes |
-|---|---|---|---|
-| `windows` | `process_creation` | Process events | Maps to Sysmon EID 1 equivalent. `Image`, `CommandLine`, `ParentImage` fields. |
-| `windows` | `file_event` | File events | File creation/modification. `TargetFilename` field. |
-| `windows` | `registry_event` | Registry events | Key/value changes. `TargetObject`, `Details` fields. |
-| `windows` | `network_connection` | Network events | Outbound connections. `DestinationIp`, `DestinationPort` fields. |
-| `windows` | `dns_query` | DNS events | DNS resolution. `QueryName` field. |
-| `windows` | `image_load` | Module load events | DLL loads. `ImageLoaded`, `Signed`, `Signature` fields. |
-| `windows` | `pipe_created` | Named pipe events | Pipe creation. `PipeName` field. |
-| `windows` | `driver_load` | Driver events | Driver loads. `ImageLoaded` field. |
-| `windows` | `ps_script` | PowerShell events | Script block content. `ScriptBlockText` field. |
-| `windows` | `ps_module` | PowerShell events | Module logging. |
-| `linux` | `process_creation` | Linux process events | Linux process telemetry. Field names may differ from Windows. |
-| `macos` | `process_creation` | macOS process events | macOS process telemetry. |
+### Logsource category catalogue
 
-**Critical rule**: If a Sigma `logsource` combination is not in this table, the rule may not fire on HarfangLab. Verify against vendor documentation before deploying.
+Fields available for each selection depend on the `product` + `category` combination. The schema validates this — invalid fields are rejected.
+
+**Windows** (39 categories):
+
+| Category group | Categories |
+|---|---|
+| **Process** | `process_creation`, `process_access`, `process_duplicate_handle`, `process_tampered` |
+| **Network** | `network_connection`, `network_dpi`, `network_close` |
+| **File** | `file_create`, `file_read`, `file_write`, `file_rename`, `file_remove`, `file_shadowcopy`, `file_download` |
+| **Registry** | `registry_event` |
+| **Driver/Module** | `driver_load`, `library_event` |
+| **Injection** | `remote_thread`, `injected_thread`, `raw_device_access`, `etwti_ntallocatevirtualmemory` |
+| **Named pipes** | `named_pipe_creation`, `named_pipe_connection` |
+| **PowerShell** | `powershell_event` |
+| **AMSI** | `amsi_scan` |
+| **Auth** | `login_event`, `logout_event` |
+| **DNS** | `dns_query` |
+| **URL** | `url_request` |
+| **Account** | `user`, `group` |
+| **System** | `service`, `scheduled_task`, `eventlog` |
+| **Win32k** | `win32k_getasynckeystate`, `win32k_registerrawinputdevices`, `win32k_setwindowshookex` |
+
+**Linux** (12 categories): `process_creation`, `process_ptrace`, `bpf_event`, `library_event`, `filesystem_event`, `network_connection`, `network_listen`, `network_rawsocket`, `login_event`, `logout_event`, `url_request`, `dns_query`
+
+**macOS** (6 categories): `process_creation`, `library_event`, `filesystem_event`, `network_connection`, `login_event`, `logout_event`
+
+### Sigma → CoreTide translation guide
+
+When converting a standard SigmaHQ rule to CoreTide format:
+
+1. **`logsource`** → keep `product` and `category`, drop `service` (not used in CoreTide schema)
+2. **`detection` blocks** → convert each named block to a `selections` array item with `name`, `field`, `modifiers`, `value`
+3. **Pipe modifiers** (`Image|endswith`) → split into `field: Image` + `modifiers: [endswith]`
+4. **Multiple fields in one block** → create separate selection items per field
+5. **`condition`** → keep the boolean expression, reference selection `name` values
+6. **`level`** → map to `action` (informational/low → Alert, medium/high → Alert & Block, critical → Alert, Block & Quarantine)
+7. **`status`** → map to `maturity` (experimental → Experimental, test → Testing, stable → Stable)
+8. **`falsepositives`** → `false_positives` array
+9. **`tags`** → keep ATT&CK format (`attack.t1059.001`), validated by regex pattern
 
 ---
 
@@ -161,18 +216,75 @@ dns.query matches ".*\\.(top|xyz|tk|ml|ga|cf|buzz)$"
 
 ---
 
-## 4. YARA — file and memory pattern matching
+## 4. YARA — CoreTide schema format
 
-HarfangLab supports YARA rules for static pattern matching. Standard YARA syntax applies; relevant scopes include:
+HarfangLab supports YARA rules for file and memory scanning. In CoreTide, YARA rules use a structured YAML format (mutually exclusive with Sigma — a rule is either Sigma OR YARA).
 
-- **File scan**: applied at file write / first-seen.
-- **Memory scan**: applied to running process memory.
-- **Module scan**: applied to loaded DLLs / executable images.
+### CoreTide YARA rule structure
 
-### Authoring discipline
+```yaml
+harfanglab:
+  schema: harfanglab::1.0
+  status: PRODUCTION
+  maturity: Stable
+  confidence: Strong
+  action: Alert
+  tags:
+    - attack.execution
+    - attack.t1059.001
 
-- Standard YARA hygiene: meta block populated (author, date, hash references), `condition` clauses referencing strings rather than dragging full file scans, anchors via `at` / `in` where appropriate.
-- Avoid pure-string YARA against high-volume telemetry — performance cost is real.
+  yara:
+    imports:
+      - pe
+      - math
+    meta:
+      context:
+        - file
+        - memory
+      os: Windows
+      arch:
+        - x64
+      score: High
+    strings: |
+      $mz = "MZ" at 0
+      $suspicious_api = "VirtualAlloc" ascii wide
+      $shellcode_pattern = { 48 83 EC 28 48 8B 05 }
+    condition: |
+      $mz and ($suspicious_api or $shellcode_pattern) and
+      math.entropy(0, filesize) > 7.0
+```
+
+### YARA imports (available modules)
+
+| Module | Purpose | Key functions |
+|---|---|---|
+| `pe` | Windows PE analysis | `pe.machine`, `pe.imports()`, `pe.exports()`, `pe.entry_point`, `pe.rich_signature`, `pe.number_of_sections` |
+| `dotnet` | .NET assembly analysis | `dotnet.is_dotnet`, `dotnet.module_name`, `dotnet.number_of_streams` |
+| `elf` | Linux ELF analysis | `elf.type`, `elf.machine`, `elf.entry_point` (⚠️ performance impact) |
+| `hash` | Cryptographic hashing | `hash.md5()`, `hash.sha256()`, `hash.crc32()` |
+| `math` | Mathematical functions | `math.entropy()`, `math.mean()`, `math.serial_correlation()` |
+| `time` | Timestamp comparison | `time.now()` |
+| `string` | String manipulation | `string.to_int()`, `string.length()` |
+| `macho` | macOS Mach-O analysis | `macho.file_type`, `macho.has_entitlement()` |
+
+### Scan context and auto-routing
+
+| `meta.context` | Description | Auto-routing |
+|---|---|---|
+| `process` | Scan process memory and executable images | — |
+| `thread` | Scan thread context and memory regions | — |
+| `memory` | Scan raw memory regions and buffers | — |
+| `file` | Scan files on disk | Auto-routes: `file.pe` (Windows), `file.macho` (macOS), `file.elf` (Linux) |
+
+### YARA authoring discipline
+
+- **`meta.context`** must be set — determines where the rule scans.
+- **`meta.os`** must be set — determines file context routing.
+- **Anchor strings** with `at` / `in` where possible to reduce scan scope.
+- **Avoid pure-string YARA** against high-volume telemetry — performance cost is real.
+- **Use modules** (`pe`, `math`) for structural checks rather than brute-force string matching.
+- **`imports`** must list every module referenced in `condition`.
+- **`score`** auto-derives from `alert_severity` but can be overridden (Informational=10, Low=30, Medium=50, High=70, Critical=90).
 
 ---
 
@@ -207,7 +319,28 @@ Document gaps in MDR `description` rather than assuming parity. Linux endpoint c
 
 ---
 
-## 7. Entity identifier alignment
+## 7. SIEM ingestion patterns
+
+> Table/index names are SIEM-specific. Consult your SIEM's HarfangLab integration documentation for exact configurations.
+
+| HFL source | Telemetry type | Ingestion method | Notes |
+|---|---|---|---|
+| Alerts / Threats | Detection alerts (Sigma, YARA, vendor rules) | Syslog CEF / API polling | Primary alert source |
+| Telemetry events | Process, file, network, registry, DNS events | API export or Syslog | Requires appropriate telemetry policy |
+| Audit logs | Admin actions, policy changes | API polling | Always available |
+| Threat Intelligence | IOC matches | STIX/TAXII feed or API | Requires TI configuration |
+
+### Syslog / CEF forwarding
+
+HarfangLab supports Syslog forwarding in CEF format for alerts. Configure in Administration → Integrations → Syslog.
+
+### API-based ingestion
+
+For richer data (full telemetry events, alert context), use the HarfangLab API. The `/api/data/alert/alert/Alert/` and `/api/data/telemetry/` endpoints provide structured JSON.
+
+---
+
+## 8. Entity identifier alignment
 
 | Concept | HarfangLab | Microsoft Defender | CrowdStrike | SentinelOne |
 |---|---|---|---|---|
@@ -220,7 +353,7 @@ Cross-platform correlation at the SOAR / SIEM layer.
 
 ---
 
-## 8. Mapping into OpenTide MDR
+## 9. Mapping into OpenTide MDR
 
 When HarfangLab content lives in `configurations.harfanglab`:
 
@@ -233,15 +366,21 @@ When HarfangLab content lives in `configurations.harfanglab`:
 
 ---
 
-## 9. Quality checklist
+## 10. Quality checklist
 
 - [ ] Surface identified (Sigma / RHQL / YARA / Whitelist).
-- [ ] Sigma `logsource` accurate.
-- [ ] Sigma modifiers deliberate; `filter_*` blocks named explicitly.
-- [ ] `level` calibrated against alert-volume budget.
-- [ ] `falsepositives` populated.
-- [ ] `tags` include ATT&CK technique IDs.
-- [ ] `status: experimental` until production-validated.
+- [ ] CoreTide schema version set (`schema: harfanglab::1.0`).
+- [ ] `maturity` / `confidence` / `action` lifecycle fields set deliberately.
+- [ ] Sigma `logsource.product` + `logsource.category` valid for the target platform.
+- [ ] Sigma `selections` use the CoreTide array format (`name`, `field`, `modifiers`, `value`).
+- [ ] Sigma `field` values validated against the category's allowed field enum.
+- [ ] Sigma `modifiers` chosen deliberately — avoid loose `contains` on high-volume fields.
+- [ ] Sigma `condition` references selection `name` values correctly.
+- [ ] `false_positives` populated with known FP scenarios.
+- [ ] `tags` include ATT&CK technique IDs in Sigma format (`attack.t1059.001`).
+- [ ] YARA `meta.context` and `meta.os` set — determines scan scope and routing.
+- [ ] YARA `imports` lists every module referenced in `condition`.
+- [ ] YARA strings anchored where possible (`at`, `in`) for performance.
 - [ ] Sensor / OS coverage declared in MDR description.
-- [ ] YARA rules carry `meta` provenance.
-- [ ] Whitelists carry audit metadata.
+- [ ] Whitelists carry audit metadata (ticket, owner, expiry).
+- [ ] SIEM ingestion method documented (Syslog CEF / API).

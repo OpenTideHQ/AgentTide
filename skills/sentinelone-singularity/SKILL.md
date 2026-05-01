@@ -1,6 +1,6 @@
 ---
 name: sentinelone-singularity
-description: SentinelOne Singularity authoring guidance — explicit distinction from Microsoft Sentinel, surface map across STAR Custom Logic (sensor-side behavioural rules), Deep Visibility (search), Singularity Data Lake / PowerQuery, exclusions and policies, Storyline ID-based correlation, AI Engine policy modes (detect / protect), and entity alignment for cross-platform correlation. Use for sentinel_one-keyed configurations in OpenTide MDR objects — never confuse with microsoft-sentinel.
+description: SentinelOne Singularity detection engineering — explicit distinction from Microsoft Sentinel, surface map across STAR Custom Logic (sensor-side behavioural rules), Deep Visibility (DVQL), Singularity Data Lake / PowerQuery (SDL alert configuration, scheduled queries, geo/math functions), exclusions and policies, Storyline ID-based correlation, AI Engine policy modes (detect / protect), SIEM ingestion patterns, and entity alignment for cross-platform correlation. Distilled from Sentinel-One/ai-siem community detection library. Use for sentinel_one-keyed configurations in OpenTide MDR objects — never confuse with microsoft-sentinel.
 ---
 
 # SentinelOne Singularity — content authoring
@@ -192,6 +192,65 @@ $source != "" event.type == "process_creation"
 | sort host_count
 ```
 
+### SDL alert configuration
+
+PowerQuery detections in SDL are defined as alert configurations (`.conf` JSON format). Structure:
+
+```json
+{
+  "alerts": [
+    {
+      "description": "Excessive Failed Logins",
+      "evaluationFrequencyMinutes": 15,
+      "gracePeriodMinutes": 0,
+      "renotifyPeriodMinutes": 60,
+      "resolutionDelayMinutes": 0,
+      "trigger": "8 hours(event.type='SignInLogs' response.error_message contains 'failed' | group total=count() by user.name | filter total > 5)",
+      "type": "GROUPED"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `trigger` | PowerQuery expression with time window prefix (e.g., `8 hours(...)`, `1 days(...)`, `10 minutes(...)`) |
+| `evaluationFrequencyMinutes` | How often the alert evaluates |
+| `gracePeriodMinutes` | Delay before first alert fires |
+| `renotifyPeriodMinutes` | Minimum interval between re-notifications |
+| `resolutionDelayMinutes` | Delay before auto-resolving |
+| `type` | `"GROUPED"` for per-entity alerting, omit for global |
+
+### PowerQuery function reference
+
+| Function | Purpose | Example |
+|---|---|---|
+| `count()` | Event count | `group count() by user.name` |
+| `countDistinct(field)` | Distinct count | `countDistinct(endpoint.name) as host_count` |
+| `min(field)` / `max(field)` | Range bounds | `min(timestamp) as first` |
+| `sum(field)` / `avg(field)` | Arithmetic | `sum(bytes) as total_bytes` |
+| `split(field, delim)` | String split | `split(user, "\\\\")[0]` |
+| `geo_ip_country(ip)` | IP to country | `geo_ip_country(src.ip.address)` |
+| `geo_ip_location(ip)` | IP to lat/lon | `geo_ip_location(src.ip.address)` |
+| `geo_distance(loc1, loc2)` | Distance in km | `geo_distance(geo_ip_location(a.ip), geo_ip_location(b.ip))` |
+| `running_sum(n)` | Running total | `running_sum(1)` for row numbering |
+| `abs(n)` | Absolute value | `abs(b.timestamp - a.timestamp)` |
+| `parse "pattern"` | Field extraction | `parse "User: $user$"` |
+| `columns` | Field projection | `columns timestamp, user.name, src.ip.address` |
+| `sort` | Ordering | `sort -count` (descending) |
+| `transaction` | Group sequential events | Transaction-based correlation |
+| `join` | Cross-stream join | `join a=(...), b=(...) on key` |
+
+### Multi-source filtering
+
+SDL ingests from multiple data sources. Use `dataSource.name` to filter:
+
+```
+dataSource.name='Azure Event Hub' event.type='SignInLogs'
+```
+
+Common data sources: `S1Agent` (endpoint), `Azure Event Hub`, `AWS CloudTrail`, `Okta`, `Office 365`, custom integrations.
+
 ### Scheduled queries
 
 PowerQuery searches can be scheduled to fire alerts; treat with the same discipline as Sentinel scheduled rules:
@@ -265,7 +324,29 @@ Cloud Workload Security (CWS) for Linux containers / K8s is a **separate sensor*
 
 ---
 
-## 8. Entity identifier alignment
+## 8. SIEM ingestion patterns
+
+> Table/index names are SIEM-specific. Consult your SIEM's SentinelOne integration documentation for exact configurations.
+
+| S1 source | Telemetry type | Ingestion method | Notes |
+|---|---|---|---|
+| Threats / Alerts | Detection alerts (AI Engine, STAR, watchlist) | API polling or Syslog CEF forwarding | Primary alert source |
+| Deep Visibility events | Process, file, network, registry, DNS events | API export or SDL Data Lake | Requires Complete SKU |
+| Activity Log | Admin actions, policy changes | API polling | Always available |
+| Singularity Data Lake | Multi-source analytics data | Native SDL ingestion | PowerQuery runs natively |
+| Threat Intelligence | IOC matches | API or STIX/TAXII feed | Requires TI add-on |
+
+### Syslog / CEF forwarding
+
+SentinelOne supports Syslog forwarding in CEF format for threat alerts. This is the simplest integration method for traditional SIEMs. Configure in Settings → Integrations → Syslog.
+
+### API-based ingestion
+
+For richer data (Deep Visibility events, full threat context), use the SentinelOne API. The `/threats`, `/activities`, and `/deep-visibility` endpoints provide structured JSON.
+
+---
+
+## 9. Entity identifier alignment
 
 | Concept | SentinelOne | Microsoft Defender | CrowdStrike |
 |---|---|---|---|
@@ -279,7 +360,7 @@ Cross-platform correlation happens at the SOAR / SIEM layer, never via direct cr
 
 ---
 
-## 9. Mapping into OpenTide MDR
+## 10. Mapping into OpenTide MDR
 
 When SentinelOne content lives in `configurations.sentinel_one`:
 
@@ -292,20 +373,25 @@ When SentinelOne content lives in `configurations.sentinel_one`:
 
 ---
 
-## 10. Quality checklist
+## 11. Quality checklist
 
-- [ ] Surface identified (STAR / DVQL / PowerQuery / Exclusion).
+- [ ] Surface identified (STAR / DVQL / PowerQuery scheduled / SDL alert / Exclusion).
 - [ ] STAR rules deployed in Alert mode first; cooldown set.
 - [ ] DVQL pivots on `process.storyline.id`, not PID.
 - [ ] PowerQuery filters as early as possible, indexed fields first.
+- [ ] SDL alert `evaluationFrequencyMinutes` and `renotifyPeriodMinutes` set deliberately.
+- [ ] SDL alert `type: "GROUPED"` used for per-entity alerting where appropriate.
+- [ ] `dataSource.name` filter used in multi-source SDL queries.
 - [ ] AI Engine policy mode (Detect / Protect) deliberate.
 - [ ] Exclusions tight-scoped with audit metadata.
-- [ ] Sensor / SKU coverage declared in MDR description.
+- [ ] Sensor / SKU coverage declared in MDR description (endpoint vs CWS vs Identity).
 - [ ] MITRE mapping in rule metadata + MDR description.
 - [ ] FP / triage guidance written for analysts seeing the alert.
+- [ ] SIEM ingestion method documented (Syslog CEF / API / SDL native).
+- [ ] Naming caveat respected: `sentinel_one` config key, NOT `sentinel`.
 
 ---
 
-## 11. Reference catalogues
+## 12. Reference catalogues
 
 - `references/DVQL-Field-Reference.md` — DVQL event types, field names by category (process, endpoint, network, DNS, file, registry, module), operator syntax, PowerQuery differences, and cross-platform entity alignment.

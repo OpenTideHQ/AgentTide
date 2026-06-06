@@ -1,6 +1,6 @@
 ---
 name: splunk
-description: Splunk Enterprise / Enterprise Security SPL authoring discipline for detection engineering. Covers search-time discipline (index/sourcetype/time), streaming vs transforming command semantics, stats vs tstats vs mstats, CIM data model catalogue, three-layer macro architecture (source/process/filter), detection type patterns (TTP/Anomaly/Hunting/Correlation/Baseline), anomaly detection with eventstats 3-sigma, eval function reference, ES correlation search lifecycle, notable events, risk-based alerting (RBA), lookup patterns, and SPL vs KQL conceptual translation. Distilled from analysis of 2000+ production detections in splunk/security_content. Use for splunk-keyed configurations in OpenTide detection rules.
+description: Splunk Enterprise / Enterprise Security SPL authoring discipline for detection engineering. Covers search-time discipline (index/sourcetype/time), streaming vs transforming command semantics, stats vs tstats vs streamstats, CIM data model catalogue, three-layer macro architecture (source/process/filter), detection type patterns (TTP/Anomaly/Hunting/Correlation/Baseline), anomaly detection with eventstats 3-sigma, eval function reference, ES correlation search lifecycle, notable events, risk-based alerting (RBA), lookup patterns, and SPL vs KQL conceptual translation. Distilled from analysis of 2000+ production detections in splunk/security_content. Use for splunk-keyed configurations in OpenTide detection rules.
 ---
 
 # Splunk SPL — detection engineering
@@ -12,9 +12,10 @@ Author and review SPL for Splunk Enterprise / Enterprise Security. The disciplin
 
 ## 1. Search-time discipline
 
-### 1.1 Always lead with index, sourcetype, time
+### 1.1 Always lead with metadata fields index, sourcetype, time
 
-Splunk searches without an index constraint scan every index the user can read. Always start a search with the most selective root expression Splunk offers:
+Splunk searches without an index constraint scan the indexes defined as default. In production environments, there is no default index — i.e. no index constraint, no search.
+Always start a search with the most selective root expression Splunk offers:
 
 ```spl
 index=wineventlog sourcetype="WinEventLog:Security" earliest=-7d@d latest=now
@@ -25,7 +26,8 @@ index=wineventlog sourcetype="WinEventLog:Security" earliest=-7d@d latest=now
 | `index=` | Primary partition — always include |
 | `sourcetype=` | Schema-level filter — narrow further |
 | `host=`, `source=` | Index-time fields — fast |
-| `earliest=` / `latest=` | Time bound — relative (`-24h`, `-7d@d`) or absolute |
+| `earliest=` / `latest=` | Time bound — relative (`-24h`, `-7d@d`) or absolute 01/31/2026:22:00::00 or EPOCH |
+| `_index_earliest` / `_index_latest` | Time bound on index time — relative or absolute — important when log collection occurs long after the record is generated (e.g. WEL from remote laptops) |
 
 **Time tokens**: `@d` snaps to start of day; `@h` to start of hour. `-7d@d` is "midnight 7 days ago" — typically what you want. Unsnapped (`-7d`) creates a sliding window relative to "now" which leaks event-time variance.
 
@@ -33,19 +35,24 @@ index=wineventlog sourcetype="WinEventLog:Security" earliest=-7d@d latest=now
 
 Splunk extracts fields in two phases:
 
-- **Index-time fields** (`index`, `sourcetype`, `source`, `host`, `_time`, anything in `transforms.conf`) — filtered without parsing.
-- **Search-time fields** (everything else) — extracted per matching event.
+At indexing time:
+- **metadata fields**: `index`, `sourcetype`, `source`, `host`, `_time`, `_indextime`
+- **Index-time fields** anything in `fields.conf`.
 
-**Filter on index-time fields first; search-time fields last.** This is the Splunk equivalent of KQL's "filter early" rule.
+Those fields are in the TSIDX index files and can be used with `tstats`
 
+At search time — for each and every search:
+- **Search-time fields** (everything else) — extracted per matching event from `props.conf` and `transforms.conf`.
+
+**Filter on index-time fields first; search-time fields last.; Filter as much as possible on the "first-line"**
 ```spl
 // GOOD: index-time filter precedes search-time field
-index=wineventlog sourcetype="WinEventLog:Security" EventCode=4688
-| where like(CommandLine, "%-encodedcommand%")
+index=wineventlog sourcetype="WinEventLog:Security" EventCode=4688 TERM(encodedcommand) CommandLine="*-encodedcommand*"
 
 // BAD: search-time filter forces parsing before index narrowing
-| where like(CommandLine, "%-encodedcommand%")
-| search index=wineventlog
+index=wineventlog sourcetype="WinEventLog:Security" EventCode=4688 
+| eval command=CommandLine
+| where match(command, "-encodedcommand")
 ```
 
 ### 1.3 Streaming vs transforming commands
@@ -56,8 +63,7 @@ Streaming commands (`eval`, `where`, `rex`, `fields`) operate per-event and para
 
 ```spl
 // GOOD: filter and project before stats
-index=wineventlog EventCode=4688
-| where match(CommandLine, "(?i)-(enc|encodedcommand)")
+index=wineventlog EventCode=4688 TERM(encodedcommand) CommandLine="*-encodedcommand*"
 | eval ParentName=lower(ParentImage)
 | fields _time, host, User, CommandLine, ParentName
 | stats count by host, ParentName
@@ -70,19 +76,19 @@ index=wineventlog EventCode=4688
 
 ---
 
-## 2. `stats` vs `tstats` vs `mstats`
+## 2. `stats` vs `tstats` vs `streamstats`
 
 | Command | Source | Speed | Use when |
 |---|---|---|---|
 | `stats` | Raw events | Slowest — full event read | Default; fields not in tsidx |
-| `tstats` | Indexed fields (tsidx) only | 10–100× faster | All needed fields are index-time / accelerated |
-| `mstats` | Metrics index | Fast | Metric data (numeric time series) |
+| `tstats` | Indexed fields (tsidx) only or TERM() | 10–100× faster | All needed fields are index-time or terms separated by major and minor breakers |
+| `streamstats` | Streaming stateful stats | Fast | Allows stateful aggregation on streaming data |
 
 ### `tstats` patterns
 
 ```spl
 // Direct against tsidx (index-time fields only)
-| tstats count where index=wineventlog sourcetype="WinEventLog:Security" by host
+| tstats count where index=wineventlog sourcetype="WinEventLog:Security" TERM(4624) by host
 
 // Against an accelerated data model
 | tstats summariesonly=true count from datamodel=Endpoint.Processes
@@ -94,14 +100,6 @@ index=wineventlog EventCode=4688
 ```
 
 **Accelerated data models** (Common Information Model — CIM): authentication, network traffic, malware, web, change. ES correlation searches typically run against accelerated CIM data models for performance.
-
-### `mstats` for metrics
-
-```spl
-| mstats avg(_value) prestats=true span=5m where index=metrics_security
-    metric_name="auth.failures"
-| timechart avg(_value) span=5m
-```
 
 ---
 
@@ -145,18 +143,18 @@ Author detection logic to use established CIM tags and tenant macros where possi
 
 ### The three-layer macro architecture
 
-Production detection frameworks (e.g., ESCU) use a three-layer macro system for portability:
+Production detection frameworks (e.g., ESCU, Opentide) use a three-layer macro system for portability.
 
 **Layer 1 — Source macros** (index/sourcetype abstraction):
 
+Macros end with _logs  for combination of index and sourcetype; with _index for index groups.
+
 | Macro | Purpose | Customer action |
 |---|---|---|
-| `` `wineventlog_security` `` | Windows Security log | Replace with local index/sourcetype |
-| `` `sysmon` `` | Sysmon operational log | Replace with local source |
-| `` `powershell` `` | PowerShell operational log | Replace with local source |
-| `` `cloudtrail` `` | AWS CloudTrail | Replace with local sourcetype |
-| `` `okta` `` | Okta System Log | Replace with local sourcetype |
-| `` `linux_auditd` `` | Linux auditd | Replace with local sourcetype |
+| `` `win_security_logs` `` | Windows Security log | adjust the definition with local index/sourcetype |
+| `` `proxy_logs` `` | Forward proxy logs | adjust the definition with local index/sourcetype |
+| `` `win_wks_index` `` | logs related to workstations | Replace with local indexes |
+| `` `linux_audit_logs` `` | Linux auditd | Replace with local sourcetype |
 
 **Layer 2 — Process macros** (binary matching with anti-evasion):
 
@@ -176,7 +174,9 @@ Every detection ends with `` `<detection_name>_filter` `` — empty by default (
 | `suspicious_powershell_execution_filter`
 ```
 
-**Principle**: Detections are write-once, deploy-anywhere. Customers modify macros, never the search.
+**Principle**: 
+ - Detections are write-once, deploy-anywhere. Customers modify macros, never the search.
+ - If a file macros.conf is present in sub-folder reference, use it as priority into SPL.
 
 ---
 
@@ -394,10 +394,10 @@ Key `eval` functions for detection engineering:
 | Function | Purpose | Example |
 |---|---|---|
 | `if(cond, true, false)` | Conditional value | `eval severity=if(count>100, "high", "medium")` |
-| `case(c1,v1, c2,v2, ...)` | Multi-branch conditional | `eval category=case(port==22,"ssh", port==3389,"rdp", 1==1,"other")` |
+| `case(c1,v1, c2,v2, ...)` | Cascade-branch conditional exit on first match | `eval category=case(port==22,"ssh", port==3389,"rdp", 1==1,"other")` |
 | `coalesce(f1, f2, ...)` | First non-null value | `eval user=coalesce(TargetUserName, SubjectUserName)` |
 | `match(field, regex)` | Regex match (boolean) | `where match(process, "(?i)mimikatz")` |
-| `like(field, pattern)` | Wildcard match | `where like(CommandLine, "%-encodedcommand%")` |
+| `like(field, pattern)` | SQL-like match | `where like(CommandLine, "%-encodedcommand%")` |
 | `cidrmatch(cidr, ip)` | CIDR range match | `where cidrmatch("10.0.0.0/8", src_ip)` |
 | `mvfilter(expr)` | Filter multivalue field | `eval bad_ports=mvfilter(match(dest_port, "^(4444|5555)$"))` |
 | `mvcount(field)` | Count multivalue entries | `where mvcount(dest_port) > 5` |
@@ -460,7 +460,7 @@ Key `eval` functions for detection engineering:
 
 ## 10. Comment discipline
 
-Splunk comments use triple backticks:
+Splunk inline comments use triple backticks:
 
 ````spl
 ``` Detection: Suspicious encoded PowerShell ```
@@ -472,21 +472,22 @@ index=wineventlog sourcetype="WinEventLog:Security" EventCode=4688 earliest=-7d@
 ````
 
 Apply the same header structure used in KQL (Hunt, Source, MITRE, Platform). Production correlation searches should also document their notable / RBA configuration at the top.
+Within OpenTide managed detection rules, inline documentation can be reduced as it is managed via the MDR metadata and documentation pushed in parallel to Splunk and added to every alert.
 
 ---
 
 ## 11. Quality checklist
 
-- [ ] `index=` and `sourcetype=` (or CIM tag/eventtype/source macro) present.
+- [ ] `index=` and `sourcetype=` (or CIM tag/eventtype/source/ '*_logs' macro) present.
 - [ ] Time bound via `earliest=` / `latest=`, snapped where appropriate.
 - [ ] Streaming commands precede transforming commands.
-- [ ] `tstats` used when all needed fields are in an accelerated CIM data model.
+- [ ] `tstats` used when all needed fields are in an accelerated CIM data model or in TSIDX files (index-time fields and TERMS)
 - [ ] `summariesonly=true` (via macro) on `tstats from datamodel=...`.
 - [ ] `drop_dm_object_name()` applied after `tstats` to strip data model prefix.
-- [ ] `security_content_ctime()` applied to `firstTime` / `lastTime` fields.
-- [ ] No unnecessary `join` — replaced with `lookup` / `subsearch` / summary index.
-- [ ] Source macro used for index/sourcetype abstraction (portability).
-- [ ] Filter macro (`` `<detection_name>_filter` ``) appended as last pipe.
+- [ ] `soc_macro_ctime_utc()` applied to `et` / `lt` fields.
+- [ ] No `join` — replaced with an union logic in main search or a lookup.
+- [ ] macros ending with _logs or _index used for index/sourcetype abstraction (portability).
+- [ ] (ESCU only) Filter macro (`` `<detection_name>_filter` ``) appended as last pipe.
 - [ ] Process matching uses both `process_name` and `original_file_name` where applicable.
 - [ ] Anomaly detections use `eventstats avg/stdev` + threshold, not arbitrary magic numbers.
 - [ ] Header comment block populated (detection name, source, MITRE, platform).

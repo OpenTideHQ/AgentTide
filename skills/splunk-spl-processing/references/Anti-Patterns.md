@@ -67,10 +67,16 @@ index=wineventlog sourcetype="WinEventLog:Security" EventCode=4688 earliest=-7d@
 ```spl
 // BAD: subsearch may hit the 10k cap silently
 index=proxy [search index=threat_intel | fields indicator]
-// GOOD: use the main search and do the correlation in the main search
-index=proxy OR index=threat_intel
-| eval common_key=if(index=="proxy", dest_ip, ioc)
-| where isnotnull(common_key)
+
+// GOOD: lookup against a pre-loaded IOC feed
+index=proxy earliest=-24h
+| lookup threat_intel_feed indicator AS dest_ip OUTPUT category, severity
+| where isnotnull(category)
+
+// GOOD: inputlookup for tenant-maintained IOC tables
+index=proxy earliest=-24h
+| lookup local=t ioc_ip_lookup ip AS dest_ip OUTPUT threat_name
+| where isnotnull(threat_name)
 ```
 
 **Why it fails**: Subsearches have hard limits (10k results, 60s timeout). Exceeding them silently truncates results — the search appears to work but misses matches. The constraint on timeout cannot be changed. If the subsearch is needed, use command `format` or evaluate the special fields `search` or `query`.

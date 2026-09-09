@@ -1,3 +1,5 @@
+> **This repository is archived.** Agent instructions live in [`skills`](https://github.com/OpenTideHQ/skills). Pinned checkouts of this tree still work. New work: [opentide.org](https://opentide.org) · [migration guide](https://opentide.org/docs/usage/migration/).
+
 <table align="center"><tr><td align="center" width="9999">
 <img src="agenttide-logo.png" align="center" width="150" alt="AgentTide logo">
 
